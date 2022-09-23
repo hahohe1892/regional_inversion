@@ -1,7 +1,9 @@
 import rioxarray as rioxr
 from oggm import cfg, workflow, tasks, utils
+from shapely.geometry import box
+import geopandas as gpd
 
-RID = 'RGI60-08.00001'
+RID = 'RGI60-08.00010'
 
 
 def load_dhdt_path(RID):
@@ -24,6 +26,25 @@ def load_mask_path(RID):
         mask = nc.variables['glacier_mask'][:]
 
     return mask
+
+
+def crop_border_rio(xarr):
+    res = xarr.rio.resolution()[0]
+    x_min = float(xarr.x.min()) + 150 * res
+    x_max = float(xarr.x.max()) - 150 * res
+    y_min = float(xarr.y.min()) + 150 * res
+    y_max = float(xarr.y.max()) - 150 * res
+    geodf = gpd.GeoDataFrame(
+        geometry=[
+            box(x_min, y_min, x_max, y_max)],
+        crs=xarr.rio.crs)
+    clipped = xarr.rio.clip(geodf.geometry)
+
+    return clipped
+
+
+def crop_border_arr(arr):
+    return arr[150:-150, 150:-150]
 
 
 def load_dhdt_gdir(RID):
