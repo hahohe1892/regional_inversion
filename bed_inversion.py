@@ -164,8 +164,6 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
     
     # calculate dh/dt misfit and shift it
     misfit = dh_rec - dh_ref
-    #misfit[:,-3]=np.random.rand(dh_rec.shape[0])*10
-    #misfit[-3,:]=np.random.rand(dh_rec.shape[1])*10 
     misfit = shift(misfit, u_rec, v_rec, mask, .3)
 
     # apply bed and surface corrections
