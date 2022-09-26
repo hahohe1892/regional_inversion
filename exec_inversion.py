@@ -25,7 +25,7 @@ dem = crop_border_xarr(dem)
 mask = crop_border_xarr(mask)
 dhdt = crop_border_xarr(dhdt, pixels = 30)
 
-topg = np.copy(dem)
+topg = np.copy(dem)-1
 smb = np.ones_like(dem)
 
 x = dem.x
@@ -74,7 +74,7 @@ options = {
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
 
-pism = create_pism(input_file = input_file, options = options, grid_from_options = True)
+pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
 dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
 mask = read_variable(pism.grid(), input_file, 'mask', '')
