@@ -4,6 +4,7 @@ import PISM
 from bed_inversion import *
 import os
 import shutil
+from oggm.core import massbalance
 
 RID = 'RGI60-08.00010'
 working_dir = '/home/thomas/regional_inversion/output/' + RID
@@ -24,9 +25,23 @@ dhdt = load_dhdt_path(RID)
 dem = crop_border_xarr(dem)
 mask = crop_border_xarr(mask)
 dhdt = crop_border_xarr(dhdt, pixels = 30)
+dhdt.data[mask.data == 1] = np.mean(dhdt.data[mask.data == 1])
 
 topg = np.copy(dem)-1
-smb = np.ones_like(dem)
+smb = np.ones_like(dem[0])
+heights = dem.data.flatten()
+gdir = load_dhdt_gdir(RID)[0]
+mbmod = massbalance.MultipleFlowlineMassBalance(gdir)
+mbmod1 = mbmod.flowline_mb_models[0]
+mb = [dem.data.flatten(), mbmod1.get_annual_mb(heights, year=2001) * secpera * 900]
+
+
+def dem_to_mb(dem_val, mb):
+    return (mb[1][mb[0] == dem_val])
+
+for i in range(dem.data[0].shape[0]):
+    for j in range(dem.data[0].shape[1]):
+        smb[i,j] = dem_to_mb(dem.data[0][i,j], mb)[0]
 
 x = dem.x
 y = np.flip(dem.y)
@@ -86,7 +101,7 @@ dt = .1
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 10
+pmax = 100
 p_friction = 1000
 max_steps_PISM = 25
 res = 250
