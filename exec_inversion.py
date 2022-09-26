@@ -19,13 +19,13 @@ if not os.path.isdir(working_dir):
 
 
 dem = load_dem_path(RID)
-mask = load_mask_path(RID)
+mask_in = load_mask_path(RID)
 dhdt = load_dhdt_path(RID)
 
 dem = crop_border_xarr(dem)
-mask = crop_border_xarr(mask)
+mask_in = crop_border_xarr(mask_in)
 dhdt = crop_border_xarr(dhdt, pixels = 30)
-dhdt.data[mask.data == 1] = np.mean(dhdt.data[mask.data == 1])
+dhdt.data[mask_in.data == 1] = np.mean(dhdt.data[mask_in.data == 1])-.3
 
 topg = np.copy(dem)-1
 smb = np.ones_like(dem[0])
@@ -33,7 +33,10 @@ heights = dem.data.flatten()
 gdir = load_dhdt_gdir(RID)[0]
 mbmod = massbalance.MultipleFlowlineMassBalance(gdir)
 mbmod1 = mbmod.flowline_mb_models[0]
-mb = [dem.data.flatten(), mbmod1.get_annual_mb(heights, year=2001) * secpera * 900]
+mb_years = []
+for year in range(2001, 2019+1):
+    mb_years.append(mbmod1.get_annual_mb(heights, year=year) * secpera * 900)
+mb = [heights, np.mean(np.array(mb_years), axis = 0)]
 
 
 def dem_to_mb(dem_val, mb):
@@ -46,7 +49,7 @@ for i in range(dem.data[0].shape[0]):
 x = dem.x
 y = np.flip(dem.y)
 
-create_input_nc(input_file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273)
+create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt, smb, ice_surface_temp=273)
 
 options = {
     "-Mz": 50,
@@ -101,10 +104,10 @@ dt = .1
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 100
+pmax = 10000
 p_friction = 1000
 max_steps_PISM = 25
-res = 250
+res = dhdt.rio.resolution()
 A = 3.9565534675428266e-24
 
 B_init = np.copy(B_rec)
