@@ -1,5 +1,5 @@
-import numpy as np
 from oggm import utils, workflow, cfg
+from oggm.core import gis
 import geopandas as gpd
 
 cfg.initialize(logging_level='WARNING')
