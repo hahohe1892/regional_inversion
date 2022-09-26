@@ -55,12 +55,13 @@ def create_pism(input_file, options, grid_from_options = False):
 
     PISM.set_config_from_options(ctx.unit_system, ctx.config)
 
-    # get horizontal grid parameters from the input file
-    grid_parameters = PISM.GridParameters(ctx.ctx, input_file, "topg", PISM.CELL_CENTER)
-
-    if grid_from_options == True:
+    if grid_from_options:
+        grid_parameters = PISM.GridParameters()
         grid_parameters.horizontal_size_from_options()
         grid_parameters.horizontal_extent_from_options(ctx.unit_system)
+    else:
+        # get horizontal grid parameters from the input file
+        grid_parameters = PISM.GridParameters(ctx.ctx, input_file, "topg", PISM.CELL_CENTER)
 
     # get vertical grid parameters from command line options
     grid_parameters.vertical_grid_from_options(ctx.config)
@@ -106,8 +107,9 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     pism.geometry().ensure_consistency(H_min)
 
     # set basal yield stress
-    pism.basal_yield_stress_model().basal_material_yield_stress().local_part()[:] = yield_stress
-    pism.basal_yield_stress_model().basal_material_yield_stress().update_ghosts()
+    if hasattr(pism.basal_yield_stress_model(), 'basal_material_yield_stress'):
+        pism.basal_yield_stress_model().basal_material_yield_stress().local_part()[:] = yield_stress
+        pism.basal_yield_stress_model().basal_material_yield_stress().update_ghosts()
 
     dt = PISM.util.convert(dt_years, "year", "second")
     pism.run_to(ctx.time.current() + dt)
@@ -121,8 +123,11 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     mask = np.array(mask, copy=True)
 
     # get basal yield stress from PISM:
-    tauc = pism.basal_yield_stress_model().basal_material_yield_stress().local_part()
-    tauc = np.array(tauc, copy=True)
+    if hasattr(pism.basal_yield_stress_model(), 'basal_material_yield_stress'):
+        tauc = pism.basal_yield_stress_model().basal_material_yield_stress().local_part()
+        tauc = np.array(tauc, copy=True)
+    else:
+        tauc = np.ones_like(mask)
 
     # compute surface velocity:
     stress_balance_model = pism.stress_balance()
@@ -178,7 +183,10 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # correct bed in locations where a large diffusivity would cause pism to take many internal time steps
     if correct_diffusivity == 'yes':
-        B_rec[contact_zone!=1] = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)[contact_zone!=1]
+        if treat_ocean_boundary == 'yes':
+            B_rec[contact_zone!=1] = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)[contact_zone!=1]
+    else:
+        B_rec = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)
 
     if treat_ocean_boundary == 'yes':
         B_rec[contact_zone==1] = shift(B_rec, u_rec, v_rec, mask,  1)[contact_zone==1]

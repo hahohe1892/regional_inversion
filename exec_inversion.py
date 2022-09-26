@@ -7,10 +7,11 @@ import shutil
 
 RID = 'RGI60-08.00010'
 working_dir = '/home/thomas/regional_inversion/output/' + RID
-input_dir = '/home/thomas/regional_inversion/input_data/dhdt/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID 
+input_dir = '/home/thomas/regional_inversion/input_data/dhdt/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID
+input_file = working_dir + '/input.nc'
 
-if not os.path.exists(working_dir + '/input.nc'):
-    shutil.copyfile(input_dir + '/gridded_data.nc', working_dir + '/input.nc')
+if not os.path.exists(input_file):
+    shutil.copyfile(input_dir + '/gridded_data.nc', input_file)
 
 if not os.path.isdir(working_dir):
     os.mkdir(working_dir)
@@ -28,27 +29,27 @@ topg = np.copy(dem)
 smb = np.ones_like(dem)
 
 x = dem.x
-y = dem.y
+y = np.flip(dem.y)
 
-create_input_nc(working_dir + '/input.nc', x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273)
+create_input_nc(input_file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273)
 
 options = {
     "-Mz": 50,
     "-Lz": 1500,
-    "-Mx": dem.sizes['x'],
-    "-Lx": int(dem.x.max() - dem.x.min()),
-    "-My": dem.sizes['y'],
-    "-Ly": int(dem.y.max() - dem.y.min()),
+    "-Mx": x.size,
+    "-Lx": int(x.max() - x.min())/1000,
+    "-My": y.size,
+    "-Ly": int(y.max() - y.min())/1000,
     "-Lbz": 1,
     "-allow_extrapolation": True,
     "-surface": "given",
-    "-surface.given.file": working_dir + "/gridded_data.nc",
-    "-i": working_dir + "/gridded_data.nc",
+    "-surface.given.file": input_file,
+    "-i": input_file,
     "-bootstrap": "",
     "-energy": "none",
     "-sia_flow_law": "isothermal_glen",
     "-ssa_flow_law": "isothermal_glen",
-    "-stress_balance": "ssa+sia",
+    "-stress_balance": "sia",
     "-yield_stress": "constant",
     "-pseudo_plastic": "",
     "-pseudo_plastic_q": 0.2,
@@ -63,17 +64,59 @@ options = {
     "-constants.standard_gravity": 9.8,
     "-stress_balance.sia.bed_smoother.range": 0.0,
     #"-basal_resistance.beta_lateral_margin": 0,
-    "-o": working_dir + "output.nc",
+    "-o": working_dir + "/output.nc",
     "-output.timeseries.times": 1,
     "-output.timeseries.filename": working_dir + "/timeseries.nc",
     "-output.extra.times": .5,
     "-output.extra.file": working_dir + "/extra.nc",
-    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,tauc,mask,taub_mag,taud_mag,velbar_mag,velbase_mag",
+    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag",
     "-sea_level.constant.value": -10000,
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
 
-pism = create_pism(input_file = working_dir + '/gridded_data.nc', options = options, grid_from_options = True)
+pism = create_pism(input_file = input_file, options = options, grid_from_options = True)
 
-dh_ref = read_variable(pism.grid(), "Kronebreen_input.nc", 'dhdt', 'm year-1')
-mask = read_variable(pism.grid(), "Kronebreen_input.nc", 'mask', '')
+dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
+mask = read_variable(pism.grid(), input_file, 'mask', '')
+S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
+B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
+
+# set inversion paramters
+dt = .1
+beta = .5
+theta = 0.05
+bw = 0
+pmax = 10
+p_friction = 1000
+max_steps_PISM = 25
+res = 250
+A = 3.9565534675428266e-24
+
+B_init = np.copy(B_rec)
+S_ref = np.copy(S_rec)
+B_rec_all = []
+misfit_all = []
+
+# do the inversion
+for p in range(pmax):
+    B_rec, S_rec, tauc_rec, misfit = iteration(pism,
+                                               B_rec, S_rec, np.zeros_like(dem), mask, dh_ref, np.zeros_like(dem),
+                                               dt=dt,
+                                               beta=beta,
+                                               theta=theta,
+                                               bw=bw,
+                                               update_friction='no',
+                                               res=res,
+                                               A=A,
+                                               max_steps_PISM=max_steps_PISM,
+                                               treat_ocean_boundary='no',
+                                               correct_diffusivity='yes',
+                                               contact_zone=np.zeros_like(dem),
+                                               ocean_mask=np.zeros_like(dem))
+
+    B_rec_all.append(np.copy(B_rec))
+    misfit_all.append(misfit)
+
+pism.save_results()
+
+
