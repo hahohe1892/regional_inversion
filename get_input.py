@@ -2,13 +2,17 @@ from oggm import utils, workflow, cfg
 from oggm.core import gis
 import geopandas as gpd
 
-cfg.initialize(logging_level='WARNING')
-cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/dhdt'#utils.gettempdir(dirname='OGGM_Scandinavia')
+periods = ['2000-2005', '2005-2010', '2010-2015', '2015-2020']
 
-fr = utils.get_rgi_region_file('08', version='62')  # Scandinavia
-gdf = gpd.read_file(fr)
-gdirs = workflow.init_glacier_directories(gdf, from_prepro_level = 3, prepro_border=160)
+for period in periods:
 
-for gdir in gdirs:
-    cfg.PATHS['dem_file'] = '/home/thomas/regional_inversion/input_data/dhdt/dhdt/mosaic.tif'
-    gis.define_glacier_region(gdir, source = 'USER')
+    cfg.initialize(logging_level='WARNING')
+    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/dhdt_' + period
+
+    fr = utils.get_rgi_region_file('08', version='62')  # Scandinavia
+    gdf = gpd.read_file(fr)
+    gdirs = workflow.init_glacier_directories(gdf, from_prepro_level = 1, prepro_border=160)
+
+    for gdir in gdirs:
+        cfg.PATHS['dem_file'] = '/home/thomas/regional_inversion/input_data/dhdt_all/dhdt/mosaic_{}.tif'.format(period)
+        gis.define_glacier_region(gdir, source = 'USER')
