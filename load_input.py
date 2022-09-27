@@ -7,10 +7,11 @@ from netCDF4 import Dataset as NC
 
 RID = 'RGI60-08.00010'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
+period = '2000-2020'
 
 
-def load_dhdt_path(RID):
-    path = glacier_dir + 'dhdt/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
+def load_dhdt_path(RID, period):
+    path = glacier_dir + 'dhdt_{}/per_glacier/RGI60-08/RGI60-08.0'.format(period) + RID[10] + '/'+RID+ '/dem.tif'
     dhdt = rioxr.open_rasterio(path)
 
     return dhdt
@@ -24,7 +25,7 @@ def load_dem_path(RID):
 
 
 def load_mask_path(RID):
-    path = glacier_dir + 'dhdt/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+    path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
     path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
     with utils.ncDataset(path) as nc:
         mask = nc.variables['glacier_mask'][:]
@@ -53,9 +54,9 @@ def crop_border_arr(arr, pixels=150):
     return arr[pixels:-pixels, pixels:-pixels]
 
 
-def load_dhdt_gdir(RID):
+def load_dhdt_gdir(RID, period):
     cfg.initialize(logging_level='WARNING')
-    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/dhdt'
+    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/dhdt_' + period
     gdir = workflow.init_glacier_directories(RID)
 
     return gdir

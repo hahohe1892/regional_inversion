@@ -25,7 +25,7 @@ dhdt = load_dhdt_path(RID)
 dem = crop_border_xarr(dem)
 mask_in = crop_border_xarr(mask_in)
 dhdt = crop_border_xarr(dhdt, pixels = 30)
-dhdt.data[mask_in.data == 1] = np.mean(dhdt.data[mask_in.data == 1])-.3
+#dhdt.data[mask_in.data == 1] = np.mean(dhdt.data[mask_in.data == 1])-.3
 
 topg = np.copy(dem)-1
 smb = np.ones_like(dem[0])
@@ -104,7 +104,7 @@ dt = .1
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 10000
+pmax = 2000
 p_friction = 1000
 max_steps_PISM = 25
 res = dhdt.rio.resolution()
