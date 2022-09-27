@@ -8,43 +8,45 @@ from oggm.core import massbalance
 
 RID = 'RGI60-08.00010'
 working_dir = '/home/thomas/regional_inversion/output/' + RID
-input_dir = '/home/thomas/regional_inversion/input_data/dhdt/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID
 input_file = working_dir + '/input.nc'
+input_dir = '/home/thomas/regional_inversion/input_data/'
 
-if not os.path.exists(input_file):
-    shutil.copyfile(input_dir + '/gridded_data.nc', input_file)
+# default DEM (COPDEM) is from 2010 - 2015
+period = '2010-2015'
+dhdt_dir = input_dir + 'dhdt_' + period + '/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID 
+
+if not os.path.exists(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID):
+    shutil.copyfile(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID + '/gridded_data.nc', input_file)
 
 if not os.path.isdir(working_dir):
     os.mkdir(working_dir)
 
-
 dem = load_dem_path(RID)
 mask_in = load_mask_path(RID)
-dhdt = load_dhdt_path(RID)
+dhdt = load_dhdt_path(RID, period = period)
 
 dem = crop_border_xarr(dem)
 mask_in = crop_border_xarr(mask_in)
 dhdt = crop_border_xarr(dhdt, pixels = 30)
-#dhdt.data[mask_in.data == 1] = np.mean(dhdt.data[mask_in.data == 1])-.3
 
 topg = np.copy(dem)-1
+
 smb = np.ones_like(dem[0])
 heights = dem.data.flatten()
-gdir = load_dhdt_gdir(RID)[0]
+gdir = load_dem_gdir(RID)[0]
 mbmod = massbalance.MultipleFlowlineMassBalance(gdir)
 mbmod1 = mbmod.flowline_mb_models[0]
 mb_years = []
-for year in range(2001, 2019+1):
+for year in range(2010, 2015+1):
     mb_years.append(mbmod1.get_annual_mb(heights, year=year) * secpera * 900)
 mb = [heights, np.mean(np.array(mb_years), axis = 0)]
 
-
-def dem_to_mb(dem_val, mb):
-    return (mb[1][mb[0] == dem_val])
-
 for i in range(dem.data[0].shape[0]):
     for j in range(dem.data[0].shape[1]):
-        smb[i,j] = dem_to_mb(dem.data[0][i,j], mb)[0]
+        smb[i,j] = (mb[1][mb[0] == dem.data[0][i,j]])[0]
+
+# modify either smb or dhdt so that they balance
+dhdt -= .2
 
 x = dem.x
 y = np.flip(dem.y)
@@ -136,5 +138,3 @@ for p in range(pmax):
     misfit_all.append(misfit)
 
 pism.save_results()
-
-

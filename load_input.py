@@ -4,6 +4,7 @@ from oggm import cfg, workflow, utils
 from shapely.geometry import box
 import geopandas as gpd
 from netCDF4 import Dataset as NC
+import pandas as pd
 
 RID = 'RGI60-08.00010'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -25,7 +26,7 @@ def load_dem_path(RID):
 
 
 def load_mask_path(RID):
-    path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
     path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
     with utils.ncDataset(path) as nc:
         mask = nc.variables['glacier_mask'][:]
@@ -139,3 +140,7 @@ def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273
                      mask],
             }
     create_nc(vars, file)
+
+
+def get_RIDs_Sweden(file = glacier_dir + 'Glaciers_Sweden.txt'):
+    return pd.read_table(file, delimiter = ';')
