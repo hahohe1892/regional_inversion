@@ -6,6 +6,8 @@ import os
 import shutil
 from oggm.core import massbalance
 import pandas as pd
+from sklearn.linear_model import LinearRegression
+import statsmodels.api as sm
 
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
@@ -28,41 +30,30 @@ for RID in RIDs_Sweden:
     if not (np.round(mask_in.y.data,6) == np.round(dhdt.y.data, 6)).any():
         print('Error: y coordinates not the same')
         break
+    ### concatenate arrays and select based on that ###
+    dem_c = xr.concat([dem, mask_in], 'band')
+    dem_c = dem_c.where(dem_c[1] == 1)
+    
     dhdts.extend(list(dhdt.data[mask_in.data==1]))
     dem_masked = dem.data[mask_in.data==1]
     dem_correct = [x < 100 for x in dem_masked]
     dem_masked[dem_correct] = np.nan
     CenLat = int(glaciers_Sweden.where(glaciers_Sweden.RGIId == RID).dropna().CenLat.values[0].split(',')[0])
+    CenLat = float(dem.y.mean().values)
     lats.extend([CenLat] * len(dem_masked))
     dems.extend(list(((dem_masked - np.min(dem_masked))/(np.max(dem_masked) - np.min(dem_masked)))))
 
 dhdts = np.array(dhdts)
 dems = np.array(dems)
-dhdts[dhdts<-200] = np.nan
+lats = np.array(lats)
+nan_dhdts = dhdts>-200
+dhdts = dhdts[nan_dhdts]
+dems = dems[nan_dhdts]
+lats = lats[nan_dhdts]
 
-
-'''
-    try:
-        dhdts.extend(list(dhdt_c.data[mask_in_c.data==1]))
-        dems.extend(list(dem_c.data[mask_in_c.data==1]))
-    except IndexError:
-        try:
-            dhdts.extend(list(dhdt_c.data[0][:,:-1][mask_in_c.data[0]==1]))
-            dems.extend(list(dem_c.data[0][mask_in_c.data[0]==1]))
-        except IndexError:
-            try:
-                dhdts.extend(list(dhdt_c.data[0][:,1:][mask_in_c.data[0]==1]))
-                dems.extend(list(dem_c.data[0][mask_in_c.data[0]==1]))
-            except IndexError:
-            #    print(dhdt_c.data[0][:,1:].shape)
-            #    print(mask_in_c.data[0].shape)
-                i+=1
-                continue
-    #dhdts.extend(list(dhdt_c.where(mask_in_c == 1).data.flatten()))
-    #dems.extend(list(dem_c.where(mask_in_c == 1).data.flatten()))
-    #dhdts.append(list(dhdt.where(mask_in == 1).data.flatten()))
-    #dems.append(list(dem.where(mask_in == 1).data.flatten()))
-
-#dh = np.array(dhdts).flatten()
-#de = np.array(dems).flatten()
-'''
+model = LinearRegression().fit(dems.reshape((-1,1)), dhdts)
+dems_m = sm.add_constant(dems)
+lats_m = sm.add_constant(lats)
+res = sm.OLS(dhdts, dems_m).fit()
+res1 = sm.OLS(dhdts, lats_m).fit()
+res = mod.fit()
