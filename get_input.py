@@ -1,4 +1,4 @@
-from oggm import utils, workflow, cfg
+from oggm import utils, workflow, cfg, exceptions
 from oggm.core import gis
 import geopandas as gpd
 import os
@@ -18,4 +18,8 @@ for DEM in DEMs:
 
     for gdir in gdirs:
         #cfg.PATHS['dem_file'] = '/home/thomas/regional_inversion/input_data/dhdt_all/dhdt/mosaic_{}.tif'.format(period)
-        gis.define_glacier_region(gdir, source = DEM)
+        try:
+            gis.define_glacier_region(gdir, source = DEM)
+        except exceptions.InvalidDEMError:
+            print('no DEM found here')
+            continue
