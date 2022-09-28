@@ -51,6 +51,16 @@ def crop_border_xarr(xarr, pixels=150):
     return clipped
 
 
+def crop_to_xarr(xarr_target, xarr_source):
+    geodf = gpd.GeoDataFrame(
+        geometry=[
+            box(xarr_source.x.min(), xarr_source.y.min(), xarr_source.x.max(), xarr_source.y.max())],
+        crs=xarr_source.rio.crs)
+    clipped = xarr_target.rio.clip(geodf.geometry, all_touched = True)
+
+    return clipped
+
+
 def crop_border_arr(arr, pixels=150):
     return arr[pixels:-pixels, pixels:-pixels]
 
