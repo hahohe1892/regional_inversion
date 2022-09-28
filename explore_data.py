@@ -33,7 +33,9 @@ for RID in RIDs_Sweden:
     ### concatenate arrays and select based on that ###
     dem_c = xr.concat([dem, mask_in], 'band')
     dem_c = dem_c.where(dem_c[1] == 1)
-    
+    dhdt_c = xr.concat([mask_in, dhdt], 'band')
+    dhdt_c = dhdt_c.where(dhdt_c[1] == 1)
+
     dhdts.extend(list(dhdt.data[mask_in.data==1]))
     dem_masked = dem.data[mask_in.data==1]
     dem_correct = [x < 100 for x in dem_masked]
@@ -56,4 +58,4 @@ dems_m = sm.add_constant(dems)
 lats_m = sm.add_constant(lats)
 res = sm.OLS(dhdts, dems_m).fit()
 res1 = sm.OLS(dhdts, lats_m).fit()
-res = mod.fit()
+#res = mod.fit()

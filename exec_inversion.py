@@ -5,6 +5,7 @@ from bed_inversion import *
 import os
 import shutil
 from oggm.core import massbalance
+#from write_input_file import *
 
 RID = 'RGI60-08.00010'
 working_dir = '/home/thomas/regional_inversion/output/' + RID
@@ -14,6 +15,7 @@ input_dir = '/home/thomas/regional_inversion/input_data/'
 # default DEM (COPDEM) is from 2010 - 2015
 period = '2010-2015'
 dhdt_dir = input_dir + 'dhdt_' + period + '/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID 
+
 
 if not os.path.exists(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID):
     shutil.copyfile(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID + '/gridded_data.nc', input_file)
@@ -50,8 +52,10 @@ dhdt -= .2
 
 x = dem.x
 y = np.flip(dem.y)
-
+print(x.shape)
 create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt, smb, ice_surface_temp=273)
+
+#write_input_file()
 
 options = {
     "-Mz": 50,
@@ -106,7 +110,7 @@ dt = .1
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 2000
+pmax = 20
 p_friction = 1000
 max_steps_PISM = 25
 res = dhdt.rio.resolution()
