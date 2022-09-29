@@ -46,6 +46,17 @@ def write_input_file(RID):
         for j in range(dem.data[0].shape[1]):
             smb[i,j] = (mb[1][mb[0] == dem.data[0][i,j]])[0]
 
+    # calculate dhdt based on regional fitting of elevation trend
+    A = gdir.rgi_area_m2
+    if A > 1000*2:
+        output = 'large'
+        dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
+        dhdt_fit, dhdt_fit_field = get_dhdt(RID, dems_large, dhdts_large)
+    else:
+        output = 'small'
+        dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
+        dhdt_fit, dhdt_fit_field = get_dhdt(RID, dems_small, dhdts_small)
+
     # modify either smb or dhdt so that they balance
     k = 0
     learning_rate = 0.2
@@ -60,4 +71,63 @@ def write_input_file(RID):
     y = np.flip(dem.y)
     create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt, smb, ice_surface_temp=273)
 
-    
+
+def partition_dhdt(output = 'all'):
+    sum_arr = np.load('/home/thomas/regional_inversion/all_dhdt_dem.npy')
+    RIDs = np.unique(sum_arr[0])
+    dhdts_small = []
+    dems_small = []
+    dhdts_large = []
+    dems_large = []
+
+    for rid in RIDs:
+        loc = sum_arr[0] == rid
+        A = sum_arr[-1, loc][0].astype(float)
+        if A > 1000**2:
+            if output == 'small':
+                continue
+            else:
+                dhdts_large.extend(sum_arr[2, loc])
+                dems_large.extend(sum_arr[1, loc])
+        else:
+            if output == 'large':
+                continue
+            else:
+                dhdts_small.extend(sum_arr[2, loc])
+                dems_small.extend(sum_arr[1, loc])
+    dhdts_small = np.array(dhdts_small)
+    dhdts_large = np.array(dhdts_large)
+    dems_small = np.array(dems_small)
+    dems_large = np.array(dems_large)
+    dhdts_large.astype(float)
+    dhdts_small.astype(float)
+    dems_large.astype(float)
+    dems_small.astype(float)
+
+    return dems_large, dems_small, dhdts_large, dhdts_small
+
+
+def get_dhdt(RID, dems, dhdts):
+    sum_arr = np.load('/home/thomas/regional_inversion/all_dhdt_dem.npy')
+    dems_m = sm.add_constant(dems)
+    res = sm.OLS(dhdts, dems_m).fit()
+    loc = sum_arr[0] == RID
+    dem_scaled = sum_arr[1, loc].astype(float)
+    dhdt = sum_arr[2, loc].astype(float)
+    dem = load_dem_path(RID)
+
+    ks =[0]
+    misfit = 100
+    learning_rate = .2
+    while abs(misfit) > .005:
+        k = ks[-1]
+        slope_fit = k + res.params[1] * dem_scaled
+        median_extrapolated = np.median(slope_fit)
+        misfit = np.median(dhdt) - median_extrapolated
+        k += misfit * learning_rate
+        ks.append(k)
+
+    dhdt_fit = k + res.params[1] * dem_scaled
+    dhdt_fit_field = (k + res.params[1] * ((dem - np.min(dem))/(np.max(dem) - np.min(dem))))
+
+    return dhdt_fit, dhdt_fit_field, dem_scaled

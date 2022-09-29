@@ -182,7 +182,9 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
             k = np.ones((bw, bw))
             buffer = ndimage.convolve(mask_iter, k)/(bw)**2
             criterion = np.logical_and(np.logical_and(buffer > 0, buffer != 2), mask == 1)
-        B_rec[criterion]=usurf[criterion]
+        B_rec[criterion] = np.nan
+        B_rec = inpaint_nans(B_rec)
+        #B_rec[criterion]=usurf[criterion]
         S_rec[criterion]=usurf[criterion]
 
     # correct bed in locations where a large diffusivity would cause pism to take many internal time steps

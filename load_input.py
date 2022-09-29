@@ -1,6 +1,6 @@
 import numpy as np
 import rioxarray as rioxr
-from oggm import cfg, workflow, utils
+from oggm import cfg, workflow, utils, GlacierDirectory
 from shapely.geometry import box
 import geopandas as gpd
 from netCDF4 import Dataset as NC
@@ -154,3 +154,9 @@ def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273
 
 def get_RIDs_Sweden(file = glacier_dir + 'Glaciers_Sweden.txt'):
     return pd.read_table(file, delimiter = ';')
+
+
+def get_gdir_info(RID):
+    cfg.initialize(logging_level='WARNING')
+    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/DEMs'    
+    return GlacierDirectory(glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID)
