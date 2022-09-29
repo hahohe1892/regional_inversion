@@ -51,11 +51,11 @@ def write_input_file(RID):
     if A > 1000*2:
         output = 'large'
         dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field = get_dhdt(RID, dems_large, dhdts_large)
+        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dems_large, dhdts_large)
     else:
         output = 'small'
         dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field = get_dhdt(RID, dems_small, dhdts_small)
+        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dems_small, dhdts_small)
 
     # modify either smb or dhdt so that they balance
     k = 0
@@ -99,10 +99,10 @@ def partition_dhdt(output = 'all'):
     dhdts_large = np.array(dhdts_large)
     dems_small = np.array(dems_small)
     dems_large = np.array(dems_large)
-    dhdts_large.astype(float)
-    dhdts_small.astype(float)
-    dems_large.astype(float)
-    dems_small.astype(float)
+    dhdts_large = dhdts_large.astype(float)
+    dhdts_small = dhdts_small.astype(float)
+    dems_large = dems_large.astype(float)
+    dems_small = dems_small.astype(float)
 
     return dems_large, dems_small, dhdts_large, dhdts_small
 
@@ -115,6 +115,7 @@ def get_dhdt(RID, dems, dhdts):
     dem_scaled = sum_arr[1, loc].astype(float)
     dhdt = sum_arr[2, loc].astype(float)
     dem = load_dem_path(RID)
+    dem = crop_border_xarr(dem)
 
     ks =[0]
     misfit = 100
