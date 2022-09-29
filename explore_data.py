@@ -16,6 +16,7 @@ period = '2010-2015'
 dhdts_small = []
 dems_small = []
 dhdts_large = []
+
 dems_large = []
 dhdt_fields_small = []
 dhdt_fields_large = []

@@ -6,9 +6,9 @@ import geopandas as gpd
 from netCDF4 import Dataset as NC
 import pandas as pd
 
-RID = 'RGI60-08.00010'
+#RID = 'RGI60-08.00010'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
-period = '2000-2020'
+#period = '2000-2020'
 
 
 def load_dhdt_path(RID, period):
