@@ -13,6 +13,10 @@ glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 period = '2010-2015'
 
+rids = []
+dhdts = []
+dems = []
+areas = []
 dhdts_small = []
 dems_small = []
 dhdts_large = []
@@ -51,8 +55,9 @@ for RID in RIDs_Sweden:
     dem_masked = dem.data[mask_in.data==1]
     dem_correct = [x < 100 for x in dem_masked]
     dem_masked[dem_correct] = np.nan
-    dem_scaled = list(((dem_masked - np.min(dem_masked))/(np.max(dem_masked) - np.min(dem_masked)))) 
-    if gdir.rgi_area_m2 > 1000**2:
+    dem_scaled = list(((dem_masked - np.min(dem_masked))/(np.max(dem_masked) - np.min(dem_masked))))
+    a = gdir.rgi_area_m2
+    if a > 1000**2:
         dhdts_large.extend(dhdt_masked)
         dems_large.extend(dem_scaled)
         dem_fields_large.append(dem)
@@ -62,27 +67,42 @@ for RID in RIDs_Sweden:
         dems_small.extend(dem_scaled)
         dem_fields_small.append(dem)
         dhdt_fields_small.append(dhdt)
+    dhdts.extend(dhdt_masked)
+    dems.extend(dem_scaled)
+    rids.extend([RID] * len(dem_scaled))
+    areas.extend([a] * len(dem_scaled))
     CenLat = int(glaciers_Sweden.where(glaciers_Sweden.RGIId == RID).dropna().CenLat.values[0].split(',')[0])
     CenLat = float(dem.y.mean().values)
     lats.extend([CenLat] * len(dem_masked))
 
+dhdts = np.array(dhdts)
+dems = np.array(dems)
+rids = np.array(rids)
+areas = np.array(areas)
 dhdts_small = np.array(dhdts_small)
 dhdts_large = np.array(dhdts_large)
 dems_small = np.array(dems_small)
 dems_large = np.array(dems_large)
 lats = np.array(lats)
+nan_dhdts = dhdts>-200
 nan_dhdts_small = dhdts_small>-200
 nan_dhdts_large = dhdts_large>-200
+dhdts = dhdts[nan_dhdts]
 dhdts_small = dhdts_small[nan_dhdts_small]
 dhdts_large = dhdts_large[nan_dhdts_large]
 dems_small = dems_small[nan_dhdts_small]
 dems_large = dems_large[nan_dhdts_large]
-lats = lats[nan_dhdts]
+dems = dems[nan_dhdts]
+rids = rids[nan_dhdts]
+areas = areas[nan_dhdts]
+#lats = lats[nan_dhdts]
+
+summary_array = np.array((rids, dems, dhdts, areas))
 
 #model = LinearRegression().fit(dems.reshape((-1,1)), dhdts)
 dems_small_m = sm.add_constant(dems_small)
 dems_large_m = sm.add_constant(dems_large)
-lats_m = sm.add_constant(lats)
+#lats_m = sm.add_constant(lats)
 res_small = sm.OLS(dhdts_small, dems_small_m).fit()
 res_large = sm.OLS(dhdts_large, dems_large_m).fit()
 #res = mod.fit()

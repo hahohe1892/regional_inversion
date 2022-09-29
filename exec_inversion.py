@@ -55,7 +55,7 @@ options = {
     "-output.timeseries.filename": working_dir + "/timeseries.nc",
     "-output.extra.times": .5,
     "-output.extra.file": working_dir + "/extra.nc",
-    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag",
+    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag",
     "-sea_level.constant.value": -10000,
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
@@ -71,7 +71,7 @@ B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
 dt = .1
 beta = .5
 theta = 0.05
-bw = 1
+bw = 0
 pmax = 10000
 p_friction = 1000
 max_steps_PISM = 25

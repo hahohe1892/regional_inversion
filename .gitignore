@@ -1,1 +1,5 @@
 *.py~
+*.py#
+__pycache__/
+input_data/
+output/
