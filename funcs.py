@@ -2,7 +2,7 @@ import scipy.sparse as sps
 from scipy.sparse import linalg
 import numpy as np
 from numpy import matlib
-from copy import copy
+from copy import copy, deepcopy
 from netCDF4 import Dataset as NC
 from scipy.interpolate import griddata
 from scipy import ndimage
@@ -373,12 +373,14 @@ def fill(data, invalid=None):
     ind = nd.distance_transform_edt(invalid, return_distances=False, return_indices=True)
     return data[tuple(ind)]
 
-def create_buffer(data, mask):
-    data[mask==0] = np.nan
-    for i in range(5):
+def create_buffer(data, mask, width):
+    data_orig = deepcopy(data)
+    for i in range(width):
+        data[mask==0] = np.nan
         boundary_mask = mask==0
         k = np.ones((3,3),dtype=int)
-        boundary = binary_dilation(boundary_mask==0, k) & boundary_mask
+        boundary = ndimage.binary_dilation(boundary_mask==0, k) & boundary_mask
         data[boundary==1] = fill(data)[boundary==1]
+        mask[boundary==1] = 1
+        data[mask==0] = data_orig[mask==0]
     return data
-
