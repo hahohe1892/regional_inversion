@@ -172,24 +172,25 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # interpolate around ice margin
     if bw > 0:
-    #    if bw == 1:
-        mask_bw = np.copy(mask_iter)
+        # consider that in some cases, mass is only added to glacier through misfit
+        mask_iter = (S_rec*mask) > (B_rec * mask)
+        #mask_iter = mask == 1
+        mask_bw = (~mask_iter)*1
+        criterion = np.zeros_like(mask_iter)
         for i in range(bw):
             boundary_mask = mask_bw==0
             k = np.ones((3,3),dtype=int)
             boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
-            mask_bw[boundary == 1] = 1
-        criterion = np.zeros_like(mask_iter)
-        criterion[2:-2,2:-2] = (mask_bw - mask_iter)[2:-2,2:-2]
-        
-            #bw = int(bw)*2
-            #k = np.ones((bw, bw))
-            #buffer = ndimage.convolve(mask_iter, k)/(bw)**2
-            #criterion = np.logical_and(np.logical_and(buffer > 0, buffer != 2), mask == 1)
-        B_rec[criterion==1] = np.nan
-        B_rec = inpaint_nans(B_rec)
-        #B_rec[criterion]=usurf[criterion]
-        S_rec[criterion==1]=usurf[criterion==1]
+            mask_bw[boundary] = 1
+        criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
+        criterion[criterion!=1] = 0
+
+        h_inpaint = S_rec - B_rec
+        h_inpaint[criterion==1] = np.nan
+        h_inpaint = inpaint_nans(h_inpaint)
+        B_rec = S_rec - h_inpaint
+        #B_rec[criterion==1]=S_rec[criterion==1]
+        #S_rec[criterion==1]=usurf[criterion==1]
 
     # correct bed in locations where a large diffusivity would cause pism to take many internal time steps
     if correct_diffusivity == 'yes':

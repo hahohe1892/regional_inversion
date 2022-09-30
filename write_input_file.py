@@ -5,6 +5,7 @@ from bed_inversion import *
 import os
 import shutil
 from oggm.core import massbalance
+import statsmodels.api as sm
 
 def write_input_file(RID):
     working_dir = '/home/thomas/regional_inversion/output/' + RID
@@ -28,8 +29,8 @@ def write_input_file(RID):
 
     dem = crop_border_xarr(dem)
     mask_in = crop_border_xarr(mask_in)
-    dhdt = crop_border_xarr(dhdt, pixels = 30)
-
+    dhdt = crop_to_xarr(dhdt, mask_in)
+    
     topg = np.copy(dem)-1
 
     smb = np.ones_like(dem[0])
@@ -69,7 +70,7 @@ def write_input_file(RID):
 
     x = dem.x
     y = np.flip(dem.y)
-    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt, smb, ice_surface_temp=273)
+    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, ice_surface_temp=273)
 
 
 def partition_dhdt(output = 'all'):
@@ -132,3 +133,10 @@ def get_dhdt(RID, dems, dhdts):
     dhdt_fit_field = (k + res.params[1] * ((dem - np.min(dem))/(np.max(dem) - np.min(dem))))
 
     return dhdt_fit, dhdt_fit_field, dem_scaled
+
+
+glaciers_Sweden = get_RIDs_Sweden()
+RIDs_Sweden = glaciers_Sweden.RGIId
+
+for RID in RIDs_Sweden:
+    write_input_file(RID)
