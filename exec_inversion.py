@@ -7,9 +7,9 @@ import shutil
 from oggm.core import massbalance
 
 #RID = 'RGI60-08.00010'
-#RID = 'RGI60-08.00213' # Storglaciären
+RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-RID = 'RGI60-08.00005'
+#RID = 'RGI60-08.00005'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
@@ -42,9 +42,9 @@ options = {
     "-energy": "none",
     "-sia_flow_law": "isothermal_glen",
     "-ssa_flow_law": "isothermal_glen",
-    "-stress_balance": "sia",
+    "-stress_balance": "ssa+sia",
     "-yield_stress": "constant",
-    "-pseudo_plastic": "",
+    #"-pseudo_plastic": "",
     "-pseudo_plastic_q": 0.2,
     "-pseudo_plastic_uthreshold": 3.1556926e7,
     "-geometry.update.use_basal_melt_rate": "no",
@@ -60,9 +60,9 @@ options = {
     "-o": working_dir + "/output.nc",
     "-output.timeseries.times": 1,
     "-output.timeseries.filename": working_dir + "/timeseries.nc",
-    "-output.extra.times": .5,
+    "-output.extra.times": .1,
     "-output.extra.file": working_dir + "/extra.nc",
-    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag",
+    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,tauc",
     "-sea_level.constant.value": -10000,
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
@@ -76,13 +76,14 @@ mask[mask<0.5] = 0
 S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
 B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
 smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
+tauc = np.ones_like(mask) * 1e10
 
 # set inversion paramters
 dt = .1
-beta = 1
+beta = .5
 theta = 0.05
-bw = 1
-pmax = 1000
+bw = 0
+pmax = 1500
 p_friction = 1000
 max_steps_PISM = 25
 res = dem.rio.resolution()
@@ -101,7 +102,7 @@ misfit_all = []
 # do the inversion
 for p in range(pmax):
     B_rec, S_rec, tauc_rec, misfit = iteration(pism,
-                                               B_rec, S_rec, np.zeros_like(dem), mask, dh_ref, np.zeros_like(dem),
+                                               B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem),
                                                dt=dt,
                                                beta=beta,
                                                theta=theta,
@@ -117,5 +118,7 @@ for p in range(pmax):
 
     B_rec_all.append(np.copy(B_rec))
     misfit_all.append(misfit)
-
+    taud = np.zeros_like(B_rec)
+    taud[2:-2,2:-2] = get_nc_data(working_dir + '/extra.nc', 'taud_mag', -1)
+    tauc = 0.5 * taud
 pism.save_results()
