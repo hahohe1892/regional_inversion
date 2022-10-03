@@ -147,6 +147,7 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
 
     return (H, mask, u_surface, v_surface, tauc, h_old)
 
+
 def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
     h_old = usurf - bed
@@ -168,7 +169,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # apply bed and surface corrections
     B_rec = bed - beta * misfit
-    S_rec = usurf + beta * theta * misfit
+    S_rec = usurf - h_old + h_rec
+    #S_rec = usurf + beta * theta * misfit
 
     # interpolate around ice margin
     if bw > 0:
@@ -196,8 +198,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
     if correct_diffusivity == 'yes':
         if treat_ocean_boundary == 'yes':
             B_rec[contact_zone!=1] = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)[contact_zone!=1]
-    else:
-        B_rec = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)
+        else:
+            B_rec = correct_high_diffusivity(S_rec, B_rec, dt, max_steps_PISM, res, A, return_mask = False)
 
     if treat_ocean_boundary == 'yes':
         B_rec[contact_zone==1] = shift(B_rec, u_rec, v_rec, mask,  1)[contact_zone==1]
