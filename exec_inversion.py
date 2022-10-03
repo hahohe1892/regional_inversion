@@ -7,9 +7,9 @@ import shutil
 from oggm.core import massbalance
 
 #RID = 'RGI60-08.00010'
-#RID = 'RGI60-08.00213' # Storglaciären
+RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-RID = 'RGI60-08.00005'
+#RID = 'RGI60-08.00005'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
@@ -77,15 +77,19 @@ S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
 B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
 smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
 
+#input = NC(input_file, 'r+')
+#input['climatic_mass_balance'][:,:] = smb - dh_ref[2:-2,2:-2]*900
+#input.close()
+dh_ref *= 0
 # set inversion paramters
 dt = .1
 beta = 1
 theta = 0.05
-bw = 1
-pmax = 1000
+bw = 0
+pmax = 3000
 p_friction = 1000
 max_steps_PISM = 25
-res = dem.rio.resolution()
+res = dem.rio.resolution()[0]
 A = 1.733e3*np.exp(-13.9e4/(8.3*272)) # 3.9565534675428266e-24
 
 B_init = np.copy(B_rec)
@@ -93,11 +97,12 @@ S_ref = np.copy(S_rec)
 B_rec_all = []
 misfit_all = []
 
-#k = np.ones((3,3))
-#B_rec = ndimage.convolve(B_rec, k)/9
-#S_rec[B_rec>S_rec] = B_rec[B_rec>S_rec]
+k = np.ones((3,3))
+#S_rec = ndimage.convolve(S_rec, k)/9
+S_rec = ndimage.median_filter(S_rec, 9)
+B_rec[B_rec>S_rec] = S_rec[B_rec>S_rec]
 #mask = create_buffer(mask, np.copy(mask), 5)
-
+ 
 # do the inversion
 for p in range(pmax):
     B_rec, S_rec, tauc_rec, misfit = iteration(pism,
