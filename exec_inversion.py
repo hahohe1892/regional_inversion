@@ -27,7 +27,7 @@ x = dem.x
 y = np.flip(dem.y)
 
 options = {
-    "-Mz": 50,
+    "-Mz": 5,
     "-Lz": 1500,
     "-Mx": x.size,
     "-Lx": int(x.max() - x.min())/1000,
@@ -40,15 +40,15 @@ options = {
     "-i": input_file,
     "-bootstrap": "",
     "-energy": "none",
-    "-sia_flow_law": "isothermal_glen",
-    "-ssa_flow_law": "isothermal_glen",
-    "-stress_balance": "ssa+sia",
+    "-stress_balance": "blatter",
+    "-stress_balance.blatter.flow_law": "isothermal_glen",
+    "-stress_balance.blatter.coarsening_factor": 2,
+    "-stress_balance­.ice_free_thickness_standard": 1,
     "-yield_stress": "constant",
     #"-pseudo_plastic": "",
     "-pseudo_plastic_q": 0.2,
     "-pseudo_plastic_uthreshold": 3.1556926e7,
     "-geometry.update.use_basal_melt_rate": "no",
-    "-stress_balance.ssa.compute_surface_gradient_inward": "no",
     "-flow_law.isothermal_Glen.ice_softness": 1.733e3*np.exp(-13.9e4/(8.3*272)), # 3.9565534675428266e-24,
     "-constants.ice.density": 900.,
     "-constants.sea_water.density": 1000.,
@@ -62,7 +62,7 @@ options = {
     "-output.timeseries.filename": working_dir + "/timeseries.nc",
     "-output.extra.times": .1,
     "-output.extra.file": working_dir + "/extra.nc",
-    "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,tauc",
+    "-output.extra.vars": "thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,tauc",
     "-sea_level.constant.value": -10000,
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
@@ -76,14 +76,14 @@ mask[mask<0.5] = 0
 S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
 B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
 smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
-tauc = np.ones_like(mask) * 1e10
+tauc = np.ones_like(mask) * 1e20
 
 # set inversion paramters
 dt = .1
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 1500
+pmax = 500
 p_friction = 1000
 max_steps_PISM = 25
 res = dem.rio.resolution()
@@ -95,8 +95,8 @@ B_rec_all = []
 misfit_all = []
 
 #k = np.ones((3,3))
-#B_rec = ndimage.convolve(B_rec, k)/9
-#S_rec[B_rec>S_rec] = B_rec[B_rec>S_rec]
+#S_rec = ndimage.convolve(S_rec, k)/9
+#B_rec[B_rec>S_rec] = S_rec[B_rec>S_rec]
 #mask = create_buffer(mask, np.copy(mask), 5)
 
 # do the inversion
@@ -112,13 +112,10 @@ for p in range(pmax):
                                                A=A,
                                                max_steps_PISM=max_steps_PISM,
                                                treat_ocean_boundary='no',
-                                               correct_diffusivity='yes',
+                                               correct_diffusivity='no',
                                                contact_zone=np.zeros_like(dem),
                                                ocean_mask=np.zeros_like(dem))
 
     B_rec_all.append(np.copy(B_rec))
     misfit_all.append(misfit)
-    taud = np.zeros_like(B_rec)
-    taud[2:-2,2:-2] = get_nc_data(working_dir + '/extra.nc', 'taud_mag', -1)
-    tauc = 0.5 * taud
 pism.save_results()
