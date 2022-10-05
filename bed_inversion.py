@@ -162,7 +162,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # calculate modelled dh/dt
     dh_rec = (h_rec - h_old)/dt
-    
+
     # calculate dh/dt misfit and shift it
     misfit = dh_rec - dh_ref
     misfit = shift(misfit, u_rec, v_rec, mask, .3)
@@ -175,8 +175,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
     # interpolate around ice margin
     if bw > 0:
         # consider that in some cases, mass is only added to glacier through misfit
-        mask_iter = (S_rec*mask) > (B_rec * mask)
-        #mask_iter = mask == 1
+        #mask_iter = (S_rec*mask) > (B_rec * mask)
+        mask_iter = mask == 1
         mask_bw = (~mask_iter)*1
         criterion = np.zeros_like(mask_iter)
         for i in range(bw):
@@ -191,6 +191,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
         h_inpaint[criterion==1] = np.nan
         h_inpaint = inpaint_nans(h_inpaint)
         B_rec = S_rec - h_inpaint
+        S_rec[criterion==1] = np.nan
+        S_rec = inpaint_nans(S_rec)
         #B_rec[criterion==1]=S_rec[criterion==1]
         #S_rec[criterion==1]=usurf[criterion==1]
 
