@@ -3,6 +3,7 @@ import rioxarray as rioxr
 from oggm import cfg, workflow, utils, GlacierDirectory
 from funcs import *
 import shutil
+from load_input import *
 
 def nc_out(RID, field, i=-1):
     dem = load_dem_path(RID)

@@ -5,11 +5,12 @@ from bed_inversion import *
 import os
 import shutil
 from oggm.core import massbalance
+import subprocess
 
 #RID = 'RGI60-08.00010'
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-#RID = 'RGI60-08.00005'
+RID = 'RGI60-08.00005'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
@@ -37,7 +38,7 @@ for RID in RIDs_Sweden:
             "-Lbz": 1,
             "-allow_extrapolation": True,
             "-surface": "given",
-            "-surface.given.file": input_file,
+            #"-surface.given.file": input_file,
             "-i": input_file,
             "-bootstrap": "",
             "-energy": "none",
@@ -68,12 +69,23 @@ for RID in RIDs_Sweden:
             "-time_stepping.assume_bed_elevation_changed": "true"
             }
 
-        smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
-        dh_ref = get_nc_data(input_file, 'dhdt', ':')
-        input = NC(input_file, 'r+')
-        input['climatic_mass_balance'][:,:] = smb - dh_ref*900
-        input.close()
-
+        #smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
+        #dh_ref = get_nc_data(input_file, 'dhdt', ':')
+        #input = NC(input_file, 'r+')
+        #input['climatic_mass_balance'][:,:] = smb - dh_ref*900
+        #input.close()
+        '''
+        try:
+            cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,original_climatic_mass_balance', input_file]
+            subprocess.run(cmd)
+        except:
+            print('nothing to be done')
+        try:
+            cmd = ['ncrename', '-h', '-O', '-v', '.precip,climatic_mass_balance', input_file]
+            subprocess.run(cmd)
+        except:
+            print('nothing to be done')
+        '''    
         pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
         dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
@@ -89,7 +101,7 @@ for RID in RIDs_Sweden:
         # set inversion paramters
         dt = .1
         beta = 1
-        theta = 0.05
+        theta = 0.1
         bw = 1
         pmax = 3000
         p_friction = 1000

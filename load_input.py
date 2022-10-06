@@ -5,6 +5,7 @@ from shapely.geometry import box
 import geopandas as gpd
 from netCDF4 import Dataset as NC
 import pandas as pd
+from funcs import *
 
 #RID = 'RGI60-08.00010'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -34,6 +35,12 @@ def load_mask_path(RID):
     tif.data[0, :, :] = np.copy(mask)
 
     return tif
+
+def in_field(RID, field):
+    path = '/home/thomas/regional_inversion/output/' + RID + '/input.nc'
+    data = get_nc_data(path, field, ':')
+
+    return data
 
 
 def crop_border_xarr(xarr, pixels=150):
@@ -102,7 +109,7 @@ def create_nc(vars, WRIT_FILE):
     print("NetCDF file " + WRIT_FILE + " created")
 
 
-def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273):
+def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, apparent_mb, ice_surface_temp=273):
     vars = {'y':    ['m',
                      'y-coordinate in Cartesian system',
                      'projection_y_coordinate',
@@ -138,6 +145,11 @@ def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, ice_surface_temp=273
                                       'land_ice_surface_specific_mass_balance_flux',
                                       None,
                                       smb],
+            'precip': ['kg m-2 year-1',
+                                      'not actually precip, but mass balance minus dhdt',
+                                      'apparent_mb',
+                                      None,
+                                      apparent_mb],
             'dhdt': ['m/yr',
                      "rate of surface elevation change",
                      'dhdt',

@@ -68,9 +68,11 @@ def write_input_file(RID):
 
     smb -= k * 900
 
+    apparent_mb = smb - dhdt_fit_field * 900
+
     x = dem.x
     y = np.flip(dem.y)
-    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, ice_surface_temp=273)
+    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, apparent_mb, smb, ice_surface_temp=273)
 
 
 def partition_dhdt(output = 'all'):
