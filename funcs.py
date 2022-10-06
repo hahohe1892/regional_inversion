@@ -384,3 +384,15 @@ def create_buffer(data, mask, width):
         mask[boundary==1] = 1
         data[mask==0] = data_orig[mask==0]
     return data
+
+
+def dp(field1, field2, vmin = -2, vmax = 2, cmap='RdBu'):
+    fig, ax = plt.subplots()
+    field = ax.pcolor(field1 - field2, cmap=cmap, vmin=vmin, vmax=vmax)
+    fig.colorbar(field, ax=ax)
+    plt.show()
+
+
+def p(field, **kwargs):
+    plt.pcolor(field, **kwargs)
+    plt.show()
