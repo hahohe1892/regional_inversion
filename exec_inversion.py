@@ -10,11 +10,11 @@ import subprocess
 #RID = 'RGI60-08.00010'
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-RID = 'RGI60-08.00005'
+RID = 'RGI60-08.00146'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in RIDs_Sweden:
+for RID in RIDs_Sweden[80:]:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -100,8 +100,8 @@ for RID in RIDs_Sweden:
         dh_ref *= 0
         # set inversion paramters
         dt = .1
-        beta = 1
-        theta = 0.1
+        beta = .5
+        theta = 0.3
         bw = 1
         pmax = 3000
         p_friction = 1000
@@ -112,18 +112,20 @@ for RID in RIDs_Sweden:
         B_init = np.copy(B_rec)
         S_ref = np.copy(S_rec)
         B_rec_all = []
+        S_rec_all = []
         misfit_all = []
-
-        #k = np.ones((2,2))
-        #S_rec = ndimage.convolve(S_rec, k)/9
+        s_mis_all = []
+        
+        k = np.ones((3,3))
+        S_rec = ndimage.convolve(S_rec, k)/9
         #S_rec = ndimage.median_filter(S_rec, 9)
-        #B_rec[B_rec>S_rec] = S_rec[B_rec>S_rec]
+        B_rec[B_rec>S_rec] = S_rec[B_rec>S_rec]
         #mask = create_buffer(mask, np.copy(mask), 5)
 
         # do the inversion
         for p in range(pmax):
-            B_rec, S_rec, tauc_rec, misfit = iteration(pism,
-                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem),
+            B_rec, S_rec, tauc_rec, misfit, surf_misfit = iteration(pism,
+                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), S_ref,
                                                        dt=dt,
                                                        beta=beta,
                                                        theta=theta,
@@ -139,6 +141,8 @@ for RID in RIDs_Sweden:
             #taud = get_nc_data(working_dir + '/extra.nc', 'taud_mag', -1)
             #tauc[2:-2,2:-2] = 0.9 * taud
             B_rec_all.append(np.copy(B_rec))
+            S_rec_all.append(np.copy(S_rec))
+            s_mis_all.append(np.copy(surf_misfit))
             misfit_all.append(misfit)
 
         pism.save_results()
