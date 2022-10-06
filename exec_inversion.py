@@ -6,6 +6,13 @@ import os
 import shutil
 from oggm.core import massbalance
 import subprocess
+from mpi4py import MPI
+
+
+comm = MPI.COMM_WORLD
+size = comm.Get_size() # new: gives number of ranks in comm
+rank = comm.Get_rank()
+print(rank)
 
 #RID = 'RGI60-08.00010'
 #RID = 'RGI60-08.00213' # Storglaciären
@@ -14,7 +21,7 @@ RID = 'RGI60-08.00146'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in RIDs_Sweden[80:]:
+for RID in [RIDs_Sweden[80]]:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -69,24 +76,30 @@ for RID in RIDs_Sweden[80:]:
             "-time_stepping.assume_bed_elevation_changed": "true"
             }
 
-        #smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
-        #dh_ref = get_nc_data(input_file, 'dhdt', ':')
-        #input = NC(input_file, 'r+')
-        #input['climatic_mass_balance'][:,:] = smb - dh_ref*900
-        #input.close()
-        '''
-        try:
-            cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,original_climatic_mass_balance', input_file]
-            subprocess.run(cmd)
-        except:
-            print('nothing to be done')
-        try:
-            cmd = ['ncrename', '-h', '-O', '-v', '.precip,climatic_mass_balance', input_file]
-            subprocess.run(cmd)
-        except:
-            print('nothing to be done')
-        '''    
-        pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+        # switch between using apparent mass balance (the default, use_apparent_mb = True)
+        # and actual mass balance (use_apparent_mb = False)
+        # use carfully to not mess up what is written in input file
+
+        use_apparent_mb = True
+        if 'original_climatic_mass_balance' in NC(input_file).variables.keys(): # checks input file
+            raise ValueError('check whether apparent mass balance and actual mass balance are in the right spot in the input file; something is probably messed up here')
+
+        if use_apparent_mb is True:
+            if rank == 0:
+                cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,original_climatic_mass_balance', input_file]
+                subprocess.run(cmd)
+                cmd = ['ncrename', '-h', '-O', '-v', '.apparent_mass_balance,climatic_mass_balance', input_file]
+                subprocess.run(cmd)
+
+            pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+
+            if rank == 0:
+                cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,apparent_mass_balance', input_file]
+                subprocess.run(cmd)
+                cmd = ['ncrename', '-h', '-O', '-v', '.original_climatic_mass_balance,climatic_mass_balance', input_file]
+                subprocess.run(cmd)
+        else:
+            pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
         dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
         mask = read_variable(pism.grid(), input_file, 'mask', '')
@@ -96,14 +109,14 @@ for RID in RIDs_Sweden[80:]:
         B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
         tauc = np.ones_like(mask)*1e10
 
-
-        dh_ref *= 0
+        if use_apparent_mb is True:
+            dh_ref *= 0
         # set inversion paramters
         dt = .1
         beta = .5
         theta = 0.3
         bw = 1
-        pmax = 3000
+        pmax = 1
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -147,5 +160,5 @@ for RID in RIDs_Sweden[80:]:
 
         pism.save_results()
 
-    except:
+    except FileNotFoundError:
         continue
