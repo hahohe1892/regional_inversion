@@ -27,7 +27,18 @@ def all_out_to_Win(field):
     for RID in RIDs_Sweden:
         try:
             out_to_tif(RID, field)
-            shutil.move('/home/thomas/regional_inversion/output/' + RID + '/'+ field + '.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_' + field + '.tif')
+            shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/'+ field + '.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_' + field + '.tif')
         except FileNotFoundError:
             print('field {} does not exist for glacier {}'.format(field, RID))
             continue
+
+def dem_to_Win():
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+
+    for RID in RIDs_Sweden:
+        try:
+            #shutil.copy('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/DEMs/' + RID + '_dem.tif', '/home/thomas/regional_inversion/input_data/DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif')
+            shutil.copy('/home/thomas/regional_inversion/input_data/DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/DEMs/' + RID + '_dem.tif')
+        except FileNotFoundError:
+            print('dem for glacier {} not found'.format(RID))

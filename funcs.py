@@ -393,6 +393,8 @@ def dp(field1, field2, vmin = -2, vmax = 2, cmap='RdBu'):
     plt.show()
 
 
-def p(field, **kwargs):
-    plt.pcolor(field, **kwargs)
+def pl(field, **kwargs):
+    fig, ax = plt.subplots()
+    f = ax.pcolor(field, **kwargs)
+    fig.colorbar(f, ax = ax)
     plt.show()
