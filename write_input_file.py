@@ -30,8 +30,6 @@ def write_input_file(RID):
     dem = crop_border_xarr(dem)
     mask_in = crop_border_xarr(mask_in)
     dhdt = crop_to_xarr(dhdt, mask_in)
-    
-    topg = np.copy(dem)-1
 
     smb = np.ones_like(dem[0])
     heights = dem.data.flatten()
@@ -70,9 +68,14 @@ def write_input_file(RID):
 
     apparent_mb = smb - dhdt_fit_field * 900
 
+    # smooth input DEM
+    k = np.ones((3,3))
+    dem.data[0] = ndimage.convolve(dem.data[0], k)/9
+    topg = np.copy(dem)-1
+
     x = dem.x
     y = np.flip(dem.y)
-    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, apparent_mb, smb, ice_surface_temp=273)
+    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temp=273)
 
 
 def partition_dhdt(output = 'all'):
