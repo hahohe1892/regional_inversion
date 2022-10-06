@@ -12,12 +12,11 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 size = comm.Get_size() # new: gives number of ranks in comm
 rank = comm.Get_rank()
-print(rank)
 
 #RID = 'RGI60-08.00010'
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-RID = 'RGI60-08.00146'
+RID = 'RGI60-08.00085'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
@@ -81,25 +80,34 @@ for RID in [RIDs_Sweden[80]]:
         # use carfully to not mess up what is written in input file
 
         use_apparent_mb = True
-        if 'original_climatic_mass_balance' in NC(input_file).variables.keys(): # checks input file
-            raise ValueError('check whether apparent mass balance and actual mass balance are in the right spot in the input file; something is probably messed up here')
+        if rank == 0:
+            if 'original_climatic_mass_balance' in NC(input_file).variables.keys(): # checks input file
+                raise ValueError('check whether apparent mass balance and actual mass balance are in the right spot in the input file; something is probably messed up here')
 
         if use_apparent_mb is True:
             if rank == 0:
-                cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,original_climatic_mass_balance', input_file]
+                cmd = ['ncrename', '-h', '-O', '-v', 'climatic_mass_balance,original_climatic_mass_balance', input_file]
                 subprocess.run(cmd)
-                cmd = ['ncrename', '-h', '-O', '-v', '.apparent_mass_balance,climatic_mass_balance', input_file]
+                cmd = ['ncatted', '-a', 'standard_name,original_climatic_mass_balance,o,c,original_mass_flux',input_file]
                 subprocess.run(cmd)
+                cmd = ['ncrename', '-h', '-O', '-v', 'apparent_mass_balance,climatic_mass_balance', input_file]
+                subprocess.run(cmd)
+                cmd = ['ncatted', '-a', 'standard_name,climatic_mass_balance,o,c,land_ice_surface_specific_mass_balance_flux', input_file]
+                subprocess.run(cmd)
+        comm.Barrier()
 
-            pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+        pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
+        if use_apparent_mb is True:
             if rank == 0:
-                cmd = ['ncrename', '-h', '-O', '-v', '.climatic_mass_balance,apparent_mass_balance', input_file]
+                cmd = ['ncrename', '-h', '-O', '-v', 'climatic_mass_balance,apparent_mass_balance', input_file]
                 subprocess.run(cmd)
-                cmd = ['ncrename', '-h', '-O', '-v', '.original_climatic_mass_balance,climatic_mass_balance', input_file]
+                cmd = ['ncatted', '-a', 'standard_name,apparent_mass_balance,o,c,apparent_mb', input_file]
                 subprocess.run(cmd)
-        else:
-            pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+                cmd = ['ncrename', '-h', '-O', '-v', 'original_climatic_mass_balance,climatic_mass_balance', input_file]
+                subprocess.run(cmd)
+                cmd = ['ncatted', '-a', 'standard_name,climatic_mass_balance,o,c,land_ice_surface_specific_mass_balance_flux',input_file]
+                subprocess.run(cmd)
 
         dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
         mask = read_variable(pism.grid(), input_file, 'mask', '')
@@ -116,7 +124,7 @@ for RID in [RIDs_Sweden[80]]:
         beta = .5
         theta = 0.3
         bw = 1
-        pmax = 1
+        pmax = 3000
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -128,12 +136,6 @@ for RID in [RIDs_Sweden[80]]:
         S_rec_all = []
         misfit_all = []
         s_mis_all = []
-        
-        k = np.ones((3,3))
-        S_rec = ndimage.convolve(S_rec, k)/9
-        #S_rec = ndimage.median_filter(S_rec, 9)
-        B_rec[B_rec>S_rec] = S_rec[B_rec>S_rec]
-        #mask = create_buffer(mask, np.copy(mask), 5)
 
         # do the inversion
         for p in range(pmax):
