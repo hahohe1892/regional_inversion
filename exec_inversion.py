@@ -7,7 +7,7 @@ import shutil
 from oggm.core import massbalance
 import subprocess
 from mpi4py import MPI
-
+from write_output import *
 
 comm = MPI.COMM_WORLD
 size = comm.Get_size() # new: gives number of ranks in comm
@@ -16,11 +16,11 @@ rank = comm.Get_rank()
 #RID = 'RGI60-08.00010'
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
-RID = 'RGI60-08.00085'
+#RID = 'RGI60-08.00085'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
-
-for RID in RIDs_Sweden:
+sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-08.00223']
+for RID in sample_glaciers:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -123,7 +123,7 @@ for RID in RIDs_Sweden:
         # set inversion paramters
         dt = .1
         beta = .5
-        theta = 0.3
+        theta = 0.05
         bw = 1
         pmax = 3000
         p_friction = 1000
@@ -137,6 +137,16 @@ for RID in RIDs_Sweden:
         S_rec_all = []
         misfit_all = []
 
+        '''
+        S = np.copy(S_rec)
+        S[2:-2,2:-2] = nc_out(RID, 'usurf', file='output_v0.2.nc')
+        topg = np.copy(B_rec)
+        topg[2:-2,2:-2] = nc_out(RID, 'topg', file='output_v0.2.nc')
+        S_rec[mask==1] = S[mask==1] - np.mean(S[mask == 1] - S_ref[mask==1])
+        B_rec = topg + (S - S_ref)
+        B_rec = np.minimum(B_rec, S_rec)
+        '''
+        
         # do the inversion
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit = iteration(pism,
@@ -159,6 +169,6 @@ for RID in RIDs_Sweden:
             misfit_all.append(misfit)
 
         pism.save_results()
-
-    except:
+        break
+    except ValueError:
         continue

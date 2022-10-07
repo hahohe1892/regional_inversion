@@ -5,10 +5,10 @@ from funcs import *
 import shutil
 from load_input import *
 
-def nc_out(RID, field, i=-1):
+def nc_out(RID, field, i=-1, file = 'output.nc'):
     dem = load_dem_path(RID)
     dem = crop_border_xarr(dem)
-    nc = get_nc_data('/home/thomas/regional_inversion/output/' + RID + '/output.nc', field, i)
+    nc = get_nc_data('/home/thomas/regional_inversion/output/' + RID + '/' + file, field, i)
     dem.data[0] = nc
 
     return dem
@@ -42,3 +42,19 @@ def dem_to_Win():
             shutil.copy('/home/thomas/regional_inversion/input_data/DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/DEMs/' + RID + '_dem.tif')
         except FileNotFoundError:
             print('dem for glacier {} not found'.format(RID))
+
+
+def get_all_output(field, in_or_out = 'out'):
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+
+    all_out = []
+    for RID in RIDs_Sweden:
+        if in_or_out == 'out':
+            data = nc_out(RID, field)
+        elif in_or_out == 'in':
+            data = nc_out(RID, field, file = 'input.nc', i = ':')
+        else:
+            raise ValueError('neither input nor output recognized as data source')
+        all_out.extend(data.data[0].flatten())
+    return np.array(all_out)

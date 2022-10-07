@@ -172,3 +172,7 @@ def get_gdir_info(RID):
     cfg.initialize(logging_level='WARNING')
     cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/DEMs'    
     return GlacierDirectory(glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID)
+
+
+def read_pkl(file):
+    return pd.read_pickle(file, 'gzip')

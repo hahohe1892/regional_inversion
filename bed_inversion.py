@@ -169,8 +169,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # apply bed and surface corrections
     B_rec = bed - beta * misfit
-    #S_rec = np.maximum(S_ref, usurf - h_old + h_rec)
-    S_rec = usurf + beta * theta * misfit
+    S_rec = usurf - h_old + h_rec
+    #S_rec = usurf + beta * theta * misfit
 
     # interpolate around ice margin
     if bw > 0:
