@@ -20,7 +20,7 @@ RID = 'RGI60-08.00085'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in [RIDs_Sweden[80]]:
+for RID in RIDs_Sweden:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -94,7 +94,8 @@ for RID in [RIDs_Sweden[80]]:
                 subprocess.run(cmd)
                 cmd = ['ncatted', '-a', 'standard_name,climatic_mass_balance,o,c,land_ice_surface_specific_mass_balance_flux', input_file]
                 subprocess.run(cmd)
-        comm.Barrier()
+
+        comm.Barrier() #make sure that process on rank 0 is done before proceeding; perhaps not needed though
 
         pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
@@ -135,12 +136,11 @@ for RID in [RIDs_Sweden[80]]:
         B_rec_all = []
         S_rec_all = []
         misfit_all = []
-        s_mis_all = []
 
         # do the inversion
         for p in range(pmax):
-            B_rec, S_rec, tauc_rec, misfit, surf_misfit = iteration(pism,
-                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), S_ref,
+            B_rec, S_rec, tauc_rec, misfit = iteration(pism,
+                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem),
                                                        dt=dt,
                                                        beta=beta,
                                                        theta=theta,
@@ -153,14 +153,12 @@ for RID in [RIDs_Sweden[80]]:
                                                        correct_diffusivity='yes',
                                                        contact_zone=np.zeros_like(dem),
                                                        ocean_mask=np.zeros_like(dem))
-            #taud = get_nc_data(working_dir + '/extra.nc', 'taud_mag', -1)
-            #tauc[2:-2,2:-2] = 0.9 * taud
+
             B_rec_all.append(np.copy(B_rec))
             S_rec_all.append(np.copy(S_rec))
-            s_mis_all.append(np.copy(surf_misfit))
             misfit_all.append(misfit)
 
         pism.save_results()
 
-    except FileNotFoundError:
+    except:
         continue

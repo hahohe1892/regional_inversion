@@ -148,7 +148,7 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     return (H, mask, u_surface, v_surface, tauc, h_old)
 
 
-def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, S_ref, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
+def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
     h_old = usurf - bed
     h_old = h_old * mask
@@ -171,9 +171,6 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, S_ref, dt,
     B_rec = bed - beta * misfit
     #S_rec = np.maximum(S_ref, usurf - h_old + h_rec)
     S_rec = usurf + beta * theta * misfit
-    surf_misfit = S_rec - S_ref
-    #surf_misfit = np.maximum(S_rec - S_ref, 0)
-    #S_rec += surf_misfit
 
     # interpolate around ice margin
     if bw > 0:
@@ -224,7 +221,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, S_ref, dt,
         vel_mismatch[np.isnan(vel_mismatch)]=0
         tauc_rec += vel_mismatch * tauc_rec
 
-    return B_rec, S_rec, tauc_rec, misfit, surf_misfit
+    return B_rec, S_rec, tauc_rec, misfit
 
 def iteration_friction_first(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
