@@ -5,7 +5,13 @@ from bed_inversion import *
 import os
 import shutil
 from oggm.core import massbalance
+import subprocess
+from mpi4py import MPI
+#from write_output import *
 
+comm = MPI.COMM_WORLD
+size = comm.Get_size() # new: gives number of ranks in comm
+rank = comm.Get_rank()
 #RID = 'RGI60-08.00010'
 RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00006'
@@ -66,8 +72,37 @@ options = {
     "-sea_level.constant.value": -10000,
     "-time_stepping.assume_bed_elevation_changed": "true"
     }
+use_apparent_mb = True
+if rank == 0:
+    if 'original_climatic_mass_balance' in NC(input_file).variables.keys(): # checks input file
+        raise ValueError('check whether apparent mass balance and actual mass balance are in the right spot in the input file; something is probably messed up here')
+
+if use_apparent_mb is True:
+    if rank == 0:
+        cmd = ['ncrename', '-h', '-O', '-v', 'climatic_mass_balance,original_climatic_mass_balance', input_file]
+        subprocess.run(cmd)
+        cmd = ['ncatted', '-a', 'standard_name,original_climatic_mass_balance,o,c,original_mass_flux',input_file]
+        subprocess.run(cmd)
+        cmd = ['ncrename', '-h', '-O', '-v', 'apparent_mass_balance,climatic_mass_balance', input_file]
+        subprocess.run(cmd)
+        cmd = ['ncatted', '-a', 'standard_name,climatic_mass_balance,o,c,land_ice_surface_specific_mass_balance_flux', input_file]
+        subprocess.run(cmd)
+
+comm.Barrier() #make sure that process on rank 0 is done before proceeding; perhaps not needed though
 
 pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+
+if use_apparent_mb is True:
+    if rank == 0:
+        cmd = ['ncrename', '-h', '-O', '-v', 'climatic_mass_balance,apparent_mass_balance', input_file]
+        subprocess.run(cmd)
+        cmd = ['ncatted', '-a', 'standard_name,apparent_mass_balance,o,c,apparent_mb', input_file]
+        subprocess.run(cmd)
+        cmd = ['ncrename', '-h', '-O', '-v', 'original_climatic_mass_balance,climatic_mass_balance', input_file]
+        subprocess.run(cmd)
+        cmd = ['ncatted', '-a', 'standard_name,climatic_mass_balance,o,c,land_ice_surface_specific_mass_balance_flux',input_file]
+        subprocess.run(cmd)
+
 
 dh_ref = read_variable(pism.grid(), input_file, 'dhdt', 'm year-1')
 mask = read_variable(pism.grid(), input_file, 'mask', '')
@@ -78,12 +113,14 @@ B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
 smb = get_nc_data(input_file, 'climatic_mass_balance', ':')
 tauc = np.ones_like(mask) * 1e20
 
+if use_apparent_mb is True:
+    dh_ref *= 0
 # set inversion paramters
-dt = .1
+dt = 50
 beta = .5
 theta = 0.05
 bw = 0
-pmax = 500
+pmax = 1
 p_friction = 1000
 max_steps_PISM = 25
 res = dem.rio.resolution()
