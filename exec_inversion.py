@@ -19,8 +19,8 @@ rank = comm.Get_rank()
 #RID = 'RGI60-08.00085'
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
-sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-08.00223']
-for RID in sample_glaciers:
+sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-08.00223', 'RGI60-08.00021']
+for RID in sample_glaciers[-2:]:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -50,7 +50,7 @@ for RID in sample_glaciers:
             "-energy": "none",
             "-sia_flow_law": "isothermal_glen",
             "-ssa_flow_law": "isothermal_glen",
-            "-stress_balance": "ssa+sia",
+            "-stress_balance": "sia",
             "-yield_stress": "constant",
             #"-pseudo_plastic": "",
             "-pseudo_plastic_q": 0.2,
@@ -70,7 +70,7 @@ for RID in sample_glaciers:
             "-output.timeseries.filename": working_dir + "/timeseries.nc",
             "-output.extra.times": .5,
             "-output.extra.file": working_dir + "/extra.nc",
-            "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag",
+            "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,climatic_mass_balance,rank",
             "-sea_level.constant.value": -10000,
             "-time_stepping.assume_bed_elevation_changed": "true"
             }
@@ -116,15 +116,16 @@ for RID in sample_glaciers:
         mask[mask<0.5] = 0
         S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
         B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
+        smb = read_variable(pism.grid(), input_file, 'apparent_mass_balance', 'kg m-2 year-1')
         tauc = np.ones_like(mask)*1e10
 
         if use_apparent_mb is True:
             dh_ref *= 0
         # set inversion paramters
         dt = .1
-        beta = .5
-        theta = 0.05
-        bw = 1
+        beta = .25
+        theta = 0.4
+        bw = 0
         pmax = 3000
         p_friction = 1000
         max_steps_PISM = 25
@@ -137,20 +138,38 @@ for RID in sample_glaciers:
         S_rec_all = []
         misfit_all = []
 
+        mask[smb<=0] = 1
+        
+        #smb[np.logical_and(mask == 0, smb<0)] = 0
+        #S_rec[mask == 0] += 500
+        #B_rec[mask==0] = S_rec[mask==0]
+        #S = np.copy(S_rec)
+        #S_rec[2:-2,2:-2] = nc_out(RID, 'usurf', file='output_v0.2.nc')
+        #topg = np.copy(B_rec)
+        #B_rec[2:-2,2:-2] = nc_out(RID, 'topg', file='output_v0.2.nc')
+        #S_rec[mask==1] = S[mask==1] - np.mean(S[mask == 1] - S_ref[mask==1])
+        #B_rec = topg + (S - S_ref)
+
         '''
-        S = np.copy(S_rec)
-        S[2:-2,2:-2] = nc_out(RID, 'usurf', file='output_v0.2.nc')
-        topg = np.copy(B_rec)
-        topg[2:-2,2:-2] = nc_out(RID, 'topg', file='output_v0.2.nc')
-        S_rec[mask==1] = S[mask==1] - np.mean(S[mask == 1] - S_ref[mask==1])
-        B_rec = topg + (S - S_ref)
+        mask_iter = mask == 1
+        mask_bw = (~mask_iter)*1
+        criterion = np.zeros_like(mask_iter)
+        for i in range(bw):
+            boundary_mask = mask_bw==0
+            k = np.ones((3,3),dtype=int)
+            boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
+            mask_bw[boundary] = 1
+        criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
+        criterion[criterion!=1] = 0
+
+        S_rec[criterion==1] = np.nan
+        S_rec = inpaint_nans(S_rec)
         B_rec = np.minimum(B_rec, S_rec)
         '''
-        
         # do the inversion
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit = iteration(pism,
-                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem),
+                                                       B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), smb,
                                                        dt=dt,
                                                        beta=beta,
                                                        theta=theta,
@@ -160,7 +179,7 @@ for RID in sample_glaciers:
                                                        A=A,
                                                        max_steps_PISM=max_steps_PISM,
                                                        treat_ocean_boundary='no',
-                                                       correct_diffusivity='yes',
+                                                       correct_diffusivity='no',
                                                        contact_zone=np.zeros_like(dem),
                                                        ocean_mask=np.zeros_like(dem))
 

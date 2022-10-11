@@ -67,7 +67,7 @@ def write_input_file(RID):
     smb -= k * 900
 
     apparent_mb = smb - dhdt_fit_field * 900
-
+    #apparent_mb.data[0][mask_in.data[0] == 0] = 0
     # smooth input DEM
     k = np.ones((3,3))
     dem.data[0] = ndimage.convolve(dem.data[0], k)/9
@@ -143,5 +143,5 @@ def get_dhdt(RID, dems, dhdts):
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in RIDs_Sweden:
-    write_input_file(RID)
+#for RID in RIDs_Sweden:
+#    write_input_file(RID)
