@@ -148,7 +148,7 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     return (H, mask, u_surface, v_surface, tauc, h_old)
 
 
-def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
+def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
     h_old = usurf - bed
     h_old = h_old * mask
@@ -169,9 +169,12 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
 
     # apply bed and surface corrections
     B_rec = bed - beta * misfit
-    S_rec = usurf - h_old + h_rec
-    #S_rec = usurf + beta * theta * misfit
+    #S_rec = usurf - h_old + h_rec
+    S_rec = usurf + beta * theta * misfit
 
+    #B_rec[mask == 0] = bed[mask == 0] + beta * (misfit[mask == 0] - smb[mask == 0] / 900)
+    #S_rec[mask == 0] = bed[mask == 0] + beta * (misfit[mask == 0] - smb[mask == 0] / 900)
+    
     # interpolate around ice margin
     if bw > 0:
         # consider that in some cases, mass is only added to glacier through misfit
@@ -191,8 +194,8 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
         h_inpaint[criterion==1] = np.nan
         h_inpaint = inpaint_nans(h_inpaint)
         B_rec = S_rec - h_inpaint
-        S_rec[criterion==1] = np.nan
-        S_rec = inpaint_nans(S_rec)
+        #S_rec[criterion==1] = np.nan
+        #S_rec = inpaint_nans(S_rec)
         #B_rec[criterion==1]=S_rec[criterion==1]
         #S_rec[criterion==1]=usurf[criterion==1]
 
@@ -208,9 +211,9 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, 
         B_rec[ocean_mask==1] = shift(B_rec, u_rec, v_rec,  mask, 2)[ocean_mask==1]
 
     # mask out 
-    B_rec[mask==0] = bed[mask==0]
-    S_rec[mask==0] = usurf[mask==0]
-    B_rec = np.minimum(B_rec, S_rec)
+    B_rec[np.logical_and(mask==0, smb>0)] = bed[np.logical_and(mask==0, smb>0)]
+    S_rec[np.logical_and(mask==0, smb>0)] = usurf[np.logical_and(mask==0, smb>0)]
+    S_rec = np.maximum(B_rec, S_rec)
 
     if update_friction == 'yes':   
         vel_rec = np.sqrt(u_rec**2+v_rec**2)

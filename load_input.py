@@ -176,3 +176,11 @@ def get_gdir_info(RID):
 
 def read_pkl(file):
     return pd.read_pickle(file, 'gzip')
+
+
+def print_all():
+    RIDs = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+    for RID in RIDs_Sweden:
+        gdir = load_dem_gdir(RID)
+        print(gdir[0].form)

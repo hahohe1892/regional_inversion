@@ -398,3 +398,14 @@ def pl(field, **kwargs):
     f = ax.pcolor(field, **kwargs)
     fig.colorbar(f, ax = ax)
     plt.show()
+
+
+def pl3d(X, Y, Z, mask, **kwargs):
+    fig, ax = plt.subplots()
+    x, y = np.meshgrid(X, Y)
+    ax = plt.axes(projection='3d')
+    ax.plot_surface(x, y, Z, cmap='viridis')
+    mask_nan = np.ones_like(mask) * np.nan
+    mask_nan[mask == 1] = Z[mask == 1] + 10
+    ax.plot_surface(x, y, mask_nan, color = 'b')
+    plt.show()
