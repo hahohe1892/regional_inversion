@@ -20,7 +20,7 @@ rank = comm.Get_rank()
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-08.00223', 'RGI60-08.00021']
-for RID in sample_glaciers[-2:]:
+for RID in RIDs_Sweden:
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -124,9 +124,9 @@ for RID in sample_glaciers[-2:]:
         # set inversion paramters
         dt = .1
         beta = .25
-        theta = 0.4
-        bw = 0
-        pmax = 3000
+        theta = 0.3
+        bw = 1
+        pmax = 6000
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -138,7 +138,7 @@ for RID in sample_glaciers[-2:]:
         S_rec_all = []
         misfit_all = []
 
-        mask[smb<=0] = 1
+        #mask[smb<=0] = 1
         
         #smb[np.logical_and(mask == 0, smb<0)] = 0
         #S_rec[mask == 0] += 500
@@ -150,22 +150,6 @@ for RID in sample_glaciers[-2:]:
         #S_rec[mask==1] = S[mask==1] - np.mean(S[mask == 1] - S_ref[mask==1])
         #B_rec = topg + (S - S_ref)
 
-        '''
-        mask_iter = mask == 1
-        mask_bw = (~mask_iter)*1
-        criterion = np.zeros_like(mask_iter)
-        for i in range(bw):
-            boundary_mask = mask_bw==0
-            k = np.ones((3,3),dtype=int)
-            boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
-            mask_bw[boundary] = 1
-        criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
-        criterion[criterion!=1] = 0
-
-        S_rec[criterion==1] = np.nan
-        S_rec = inpaint_nans(S_rec)
-        B_rec = np.minimum(B_rec, S_rec)
-        '''
         # do the inversion
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit = iteration(pism,
@@ -179,7 +163,7 @@ for RID in sample_glaciers[-2:]:
                                                        A=A,
                                                        max_steps_PISM=max_steps_PISM,
                                                        treat_ocean_boundary='no',
-                                                       correct_diffusivity='no',
+                                                       correct_diffusivity='yes',
                                                        contact_zone=np.zeros_like(dem),
                                                        ocean_mask=np.zeros_like(dem))
 
@@ -188,6 +172,5 @@ for RID in sample_glaciers[-2:]:
             misfit_all.append(misfit)
 
         pism.save_results()
-        break
-    except ValueError:
+    except:
         continue

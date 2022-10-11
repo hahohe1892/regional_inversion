@@ -58,3 +58,7 @@ def get_all_output(field, in_or_out = 'out'):
             raise ValueError('neither input nor output recognized as data source')
         all_out.extend(data.data[0].flatten())
     return np.array(all_out)
+
+
+
+

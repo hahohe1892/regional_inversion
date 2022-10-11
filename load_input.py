@@ -7,7 +7,7 @@ from netCDF4 import Dataset as NC
 import pandas as pd
 from funcs import *
 
-#RID = 'RGI60-08.00010'
+#RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
 #period = '2000-2020'
 
@@ -26,13 +26,19 @@ def load_dem_path(RID):
     return dem
 
 
-def load_mask_path(RID):
-    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+def load_mask_path(RID, mask_new = False):
     path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
+    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data_new.nc'
     with utils.ncDataset(path) as nc:
-        mask = nc.variables['glacier_mask'][:]
-    tif = rioxr.open_rasterio(path_tif)
-    tif.data[0, :, :] = np.copy(mask)
+        if mask_new is True:
+            mask = nc.variables['mask_new'][:]
+            tif = rioxr.open_rasterio(path_tif)
+            tif.data[0, :, :] = np.copy(mask).T
+        else:
+            mask = nc.variables['glacier_mask'][:]
+            tif = rioxr.open_rasterio(path_tif)
+            tif.data[0, :, :] = np.copy(mask)
+
 
     return tif
 
@@ -184,3 +190,6 @@ def print_all():
     for RID in RIDs_Sweden:
         gdir = load_dem_gdir(RID)
         print(gdir[0].form)
+
+
+
