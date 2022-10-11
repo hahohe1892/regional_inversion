@@ -165,6 +165,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
 
     # calculate dh/dt misfit and shift it
     misfit = dh_rec - dh_ref
+    misfit = np.maximum(np.minimum(misfit, 5), -5)
     #misfit = shift(misfit, u_rec, v_rec, mask, .3)
 
     # apply bed and surface corrections
@@ -189,13 +190,14 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
             mask_bw[boundary] = 1
         criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
         criterion[criterion!=1] = 0
+        criterion[smb<=0] = 0
 
         h_inpaint = S_rec - B_rec
         h_inpaint[criterion==1] = np.nan
         h_inpaint = inpaint_nans(h_inpaint)
         B_rec = S_rec - h_inpaint
-        #S_rec[criterion==1] = np.nan
-        #S_rec = inpaint_nans(S_rec)
+        S_rec[criterion==1] = np.nan
+        S_rec = inpaint_nans(S_rec)
         #B_rec[criterion==1]=S_rec[criterion==1]
         #S_rec[criterion==1]=usurf[criterion==1]
 
@@ -211,9 +213,9 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
         B_rec[ocean_mask==1] = shift(B_rec, u_rec, v_rec,  mask, 2)[ocean_mask==1]
 
     # mask out 
-    B_rec[np.logical_and(mask==0, smb>0)] = bed[np.logical_and(mask==0, smb>0)]
-    S_rec[np.logical_and(mask==0, smb>0)] = usurf[np.logical_and(mask==0, smb>0)]
-    S_rec = np.maximum(B_rec, S_rec)
+    B_rec[mask==0] = bed[mask==0]
+    S_rec[mask==0] = usurf[mask==0]
+    B_rec = np.minimum(B_rec, S_rec)
 
     if update_friction == 'yes':   
         vel_rec = np.sqrt(u_rec**2+v_rec**2)

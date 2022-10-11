@@ -407,5 +407,5 @@ def pl3d(X, Y, Z, mask, **kwargs):
     ax.plot_surface(x, y, Z, cmap='viridis')
     mask_nan = np.ones_like(mask) * np.nan
     mask_nan[mask == 1] = Z[mask == 1] + 10
-    ax.plot_surface(x, y, mask_nan, color = 'b')
+    ax.plot_surface(x, y, mask_nan, color = 'r')
     plt.show()

@@ -7,7 +7,7 @@ import shutil
 from oggm.core import massbalance
 import statsmodels.api as sm
 
-def write_input_file(RID):
+def write_input_file(RID, new_mask = False):
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     input_dir = '/home/thomas/regional_inversion/input_data/'
@@ -24,7 +24,10 @@ def write_input_file(RID):
         os.mkdir(working_dir)
 
     dem = load_dem_path(RID)
-    mask_in = load_mask_path(RID)
+    if new_mask:
+        mask_in = load_mask_path(RID, new_mask)
+    else:
+        mask_in = load_mask_path(RID)
     dhdt = load_dhdt_path(RID, period = period)
 
     dem = crop_border_xarr(dem)
@@ -143,5 +146,76 @@ def get_dhdt(RID, dems, dhdts):
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
+for RID in RIDs_Sweden:
+    write_input_file(RID, new_mask = True)
+
+    
+def correct_mask(RID):
+    dem = load_dem_path(RID)
+    mask = load_mask_path(RID)
+    #dem = crop_border_xarr(dem)
+    #mask = crop_border_xarr(mask)
+    x = dem.x
+    y = dem.y
+    slope = calc_slope(dem.data[0], dem.rio.resolution()[0])
+    slope_sums = []
+    Is = []
+    Js = []
+    m = np.copy(mask[0].data)
+    for j in range(-10, 10+1):
+        for i in range(-10, 10+1):
+            mask_new = np.copy(m)
+            if i > 0:
+                mask_new[:,:-i] = mask_new[:,i:]
+            if i < 0:
+                mask_new[:,-i:] = mask_new[:,:i]
+            if j > 0:
+                mask_new[:-j,:] = mask_new[j:,:]
+            if j < 0:
+                mask_new[-j:,:] = mask_new[:j,:]
+            if i == 0 and j == 0:
+                mask_new = np.copy(m)
+
+            slope_sums.append(np.sum(slope/(dem.data[0]**.5) * mask_new))
+            Is.append(i)
+            Js.append(j)
+    slope_sums = np.array(slope_sums)
+    min = np.min(slope_sums)
+    index = np.argwhere(slope_sums == min).squeeze()
+    print(Is[index])
+    print(Js[index])
+    i = Is[index]
+    j = Js[index]
+    mask_new = np.copy(m)
+    if i > 0:
+        mask_new[:,:-i] = mask_new[:,i:]
+    if i < 0:
+        mask_new[:,-i:] = mask_new[:,:i]
+    if j > 0:
+        mask_new[:-j,:] = mask_new[j:,:]
+    if j < 0:
+        mask_new[-j:,:] = mask_new[:j,:]
+    if i == 0 and j == 0:
+        mask_new = np.copy(m)
+
+    mask[0].data -= (m - mask_new)
+    path = '/home/thomas/regional_inversion/input_data/dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] +'/' + RID +'/gridded_data.nc'
+    new_file = '/home/thomas/regional_inversion/input_data/dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] +'/' + RID +'/gridded_data_new.nc'
+    if not os.path.exists(new_file):
+        shutil.copyfile(path, new_file)
+    nc = NC(new_file, 'r+')
+    if 'mask_new' not in nc.variables.keys():
+        nc.createVariable('mask_new', int, ('x', 'y'))
+    nc.close()
+    nc = NC(new_file, 'r+')
+    nc['mask_new'][:,:] = mask_new
+    nc.close()
+    
+    mask.rio.to_raster(path)
+
+
+#glaciers_Sweden = get_RIDs_Sweden()
+#RIDs_Sweden = glaciers_Sweden.RGIId
+
 #for RID in RIDs_Sweden:
-#    write_input_file(RID)
+#    correct_mask(RID)
