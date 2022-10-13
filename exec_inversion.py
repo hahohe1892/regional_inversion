@@ -20,7 +20,8 @@ rank = comm.Get_rank()
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-08.00223', 'RGI60-08.00021']
-for RID in RIDs_Sweden:
+for RID in RIDs_Sweden[:1]:
+    RID = 'RGI60-08.00213'
     try:
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -97,7 +98,17 @@ for RID in RIDs_Sweden:
 
         comm.Barrier() #make sure that process on rank 0 is done before proceeding; perhaps not needed though
 
+        nc_input = NC(input_file, 'r+')
+        mask_infile = nc_input['mask'][:,:]
+        cmb = nc_input['climatic_mass_balance'][:,:]
+        nc_input['climatic_mass_balance'][:,:] *= mask_infile
+        nc_input.close()
+
         pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
+
+        nc_input = NC(input_file, 'r+')
+        nc_input['climatic_mass_balance'][:,:] = cmb
+        nc_input.close()
 
         if use_apparent_mb is True:
             if rank == 0:
@@ -122,11 +133,11 @@ for RID in RIDs_Sweden:
         if use_apparent_mb is True:
             dh_ref *= 0
         # set inversion paramters
-        dt = .1
+        dt = 2000
         beta = .25
         theta = 0.3
         bw = 1
-        pmax = 6000
+        pmax = 1
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -138,6 +149,14 @@ for RID in RIDs_Sweden:
         S_rec_all = []
         misfit_all = []
 
+        thk_oggm_in = load_thk_path(RID)
+        thk_oggm_in = thk_oggm_in.rio.reproject_match(dem)
+        thk_oggm_in = thk_oggm_in.fillna(0)
+        thk_oggm = np.zeros_like(mask)
+        thk_oggm[2:-2,2:-2] = thk_oggm_in
+        thk_oggm[mask == 0] = 0
+        B_rec = S_rec - thk_oggm
+        S_rec = np.copy(B_rec)
         #dH = np.max(S_rec[mask==1]) - np.min(S_rec[mask==1])
         #tau = 0.005+1.598*dH-0.435*dH**2  #Haeberli and Hoelzle
         #slope = calc_slope(S_rec, res)
@@ -181,5 +200,5 @@ for RID in RIDs_Sweden:
 
         pism.save_results()
 
-    except:
+    except KeyError:
         continue

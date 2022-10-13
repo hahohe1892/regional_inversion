@@ -43,7 +43,7 @@ def load_mask_path(RID, mask_new = False):
 
 
 def load_georeferenced_mask(RID):
-    path = glacier_dir + 'outlines/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif'
+    path = glacier_dir + 'outlines/georeferenced_masks/mask_{}.tif'.format(RID)
     mask = rioxr.open_rasterio(path)
 
     return mask
