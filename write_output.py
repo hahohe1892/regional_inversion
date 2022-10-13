@@ -71,3 +71,19 @@ def get_all_output(field, in_or_out = 'out'):
     return np.array(all_out)
 
 
+def raw_mask_out_to_Win(field = 'mask', file = 'gridded_data.nc'):
+    ''' date should be given as "dd/mm/yyyy'''
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+
+    for RID in RIDs_Sweden:
+        path_dem = '/home/thomas/regional_inversion/input_data/DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
+        path = '/home/thomas/regional_inversion/input_data/DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+        data = get_nc_data(path, 'glacier_' + field, ':')
+        dem = rioxr.open_rasterio(path_dem)
+        dem.data[0, :, :] = np.copy(data)
+        path_out = '/home/thomas/regional_inversion/input_data/outlines/raw_masks/mask_' + RID + '.tif'
+        dem.rio.to_raster(path_out)
+        shutil.copy(path_out, '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/08_rgi60_Scandinavia/raw_masks/mask_' + RID + '.tif')
+
+

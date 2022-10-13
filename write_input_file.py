@@ -24,21 +24,19 @@ def write_input_file(RID, new_mask = False):
         os.mkdir(working_dir)
 
     dem = load_dem_path(RID)
-    if new_mask:
+    if new_mask == True:
         mask_in = load_georeferenced_mask(RID)
-        mask_smb = load_mask_path(RID)
     else:
         mask_in = load_mask_path(RID)
+        mask_in.data[0][mask_in.data[0] == mask_in.rio.nodata] = 0
     dhdt = load_dhdt_path(RID, period = period)
 
     dem = crop_border_xarr(dem)
-    mask_in = crop_to_xarr(mask_in, dem)
-    mask_in.data[0][:3,:] = 0
-    mask_in.data[0][:,:3] = 0
-    mask_in.data[0][:,-3:] = 0
-    mask_in.data[0][-3:,:] = 0
-
-    mask_smb = crop_to_xarr(mask_smb, dem)
+    mask_in = mask_in.rio.reproject_match(dem)
+    mask_in.data[0][:2,:] = 0
+    mask_in.data[0][:,:2] = 0
+    mask_in.data[0][-2:,:] = 0
+    mask_in.data[0][:,-2:] = 0
 
     dhdt = crop_to_xarr(dhdt, dem)
 
@@ -70,9 +68,9 @@ def write_input_file(RID, new_mask = False):
     # modify either smb or dhdt so that they balance
     k = 0
     learning_rate = 0.2
-    smb_misfit = np.mean(smb[mask_smb.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_smb.data[0]==1])
+    smb_misfit = np.mean(smb[mask_in.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_in.data[0]==1])
     while abs(smb_misfit)>0.01:
-        smb_misfit = np.mean(smb[mask_smb.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_smb.data[0]==1]) - k
+        smb_misfit = np.mean(smb[mask_in.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_in.data[0]==1]) - k
         k += smb_misfit * learning_rate
 
     smb -= k * 900
@@ -86,7 +84,7 @@ def write_input_file(RID, new_mask = False):
 
     x = dem.x
     y = np.flip(dem.y)
-    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temp=273)
+    create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temp=273) 
 
 
 def partition_dhdt(output = 'all'):
