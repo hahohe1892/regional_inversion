@@ -39,8 +39,26 @@ def load_mask_path(RID, mask_new = False):
             tif = rioxr.open_rasterio(path_tif)
             tif.data[0, :, :] = np.copy(mask)
 
+    return tif
+
+
+def load_georeferenced_mask(RID):
+    path = glacier_dir + 'outlines/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif'
+    mask = rioxr.open_rasterio(path)
+
+    return mask
+
+
+def load_thk_path(RID):
+    path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
+    path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+    with utils.ncDataset(path) as nc:
+        thk = nc.variables['consensus_ice_thickness'][:]
+    tif = rioxr.open_rasterio(path_tif)
+    tif.data[0, :, :] = np.copy(thk)
 
     return tif
+
 
 def in_field(RID, field):
     path = '/home/thomas/regional_inversion/output/' + RID + '/input.nc'
@@ -186,10 +204,21 @@ def read_pkl(file):
 
 def print_all():
     RIDs = get_RIDs_Sweden()
-    RIDs_Sweden = glaciers_Sweden.RGIId
+    RIDs_Sweden = RIDs.RGIId
     for RID in RIDs_Sweden:
         gdir = load_dem_gdir(RID)
         print(gdir[0].form)
 
-
-
+'''
+RIDs = get_RIDs_Sweden()
+RIDs_Sweden = glaciers_Sweden.RGIId
+RID = RIDs_Sweden.loc[-1]
+RID = 'RGI60-08.00213' # Storglaciären
+m_o = load_mask_path(RID)
+m_o = crop_border_xarr(m_o)
+dem = load_dem_path(RID)
+dem = crop_border_xarr(dem)
+m_n = load_georeferenced_mask(RID)
+m_n = crop_to_xarr(m_n, dem)
+pl(m_o.data[0] - m_n.data[0])
+'''
