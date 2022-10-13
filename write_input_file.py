@@ -25,14 +25,22 @@ def write_input_file(RID, new_mask = False):
 
     dem = load_dem_path(RID)
     if new_mask:
-        mask_in = load_mask_path(RID, new_mask)
+        mask_in = load_georeferenced_mask(RID)
+        mask_smb = load_mask_path(RID)
     else:
         mask_in = load_mask_path(RID)
     dhdt = load_dhdt_path(RID, period = period)
 
     dem = crop_border_xarr(dem)
-    mask_in = crop_border_xarr(mask_in)
-    dhdt = crop_to_xarr(dhdt, mask_in)
+    mask_in = crop_to_xarr(mask_in, dem)
+    mask_in.data[0][:3,:] = 0
+    mask_in.data[0][:,:3] = 0
+    mask_in.data[0][:,-3:] = 0
+    mask_in.data[0][-3:,:] = 0
+
+    mask_smb = crop_to_xarr(mask_smb, dem)
+
+    dhdt = crop_to_xarr(dhdt, dem)
 
     smb = np.ones_like(dem[0])
     heights = dem.data.flatten()
@@ -62,9 +70,9 @@ def write_input_file(RID, new_mask = False):
     # modify either smb or dhdt so that they balance
     k = 0
     learning_rate = 0.2
-    smb_misfit = np.mean(smb[mask_in.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_in.data[0]==1])
+    smb_misfit = np.mean(smb[mask_smb.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_smb.data[0]==1])
     while abs(smb_misfit)>0.01:
-        smb_misfit = np.mean(smb[mask_in.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_in.data[0]==1]) - k
+        smb_misfit = np.mean(smb[mask_smb.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_smb.data[0]==1]) - k
         k += smb_misfit * learning_rate
 
     smb -= k * 900

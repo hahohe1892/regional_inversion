@@ -138,6 +138,14 @@ for RID in RIDs_Sweden:
         S_rec_all = []
         misfit_all = []
 
+        #dH = np.max(S_rec[mask==1]) - np.min(S_rec[mask==1])
+        #tau = 0.005+1.598*dH-0.435*dH**2  #Haeberli and Hoelzle
+        #slope = calc_slope(S_rec, res)
+        #slope[slope<0.015] = 0.015
+        #sin_slope = np.sin(np.deg2rad(slope))
+        #H=((tau)*1e5)/(slope*9.8*910)
+        #B_rec = S_rec - H
+
         #mask[smb<=0] = 1
         
         #smb[np.logical_and(mask == 0, smb<0)] = 0
@@ -172,5 +180,6 @@ for RID in RIDs_Sweden:
             misfit_all.append(misfit)
 
         pism.save_results()
+
     except:
         continue
