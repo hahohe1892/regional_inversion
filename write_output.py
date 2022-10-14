@@ -22,15 +22,15 @@ def out_to_tif(RID, field, i=-1, file = 'output.nc'):
     out.rio.to_raster(path)
 
 
-def all_out_to_Win(field, file = 'output.nc', date = '01/01/1970'):
-    ''' date should be given as "dd/mm/yyyy'''
+def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970'):
+    ''' date should be given as "hh/dd/mm/yyyy'''
     glaciers_Sweden = get_RIDs_Sweden()
     RIDs_Sweden = glaciers_Sweden.RGIId
 
     for RID in RIDs_Sweden:
         try:
             path = '/home/thomas/regional_inversion/output/' + RID + '/' + file
-            date_unix = time.mktime(datetime.datetime.strptime(date, "%d/%m/%Y").timetuple())
+            date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
             file_time = os.path.getmtime(path)
             if file_time > date_unix:
                 out_to_tif(RID, field, file = file, i = ':')
