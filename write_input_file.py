@@ -38,6 +38,14 @@ def write_input_file(RID, new_mask = False):
     mask_in.data[0][-2:,:] = 0
     mask_in.data[0][:,-2:] = 0
 
+    thk_oggm_in = load_thk_path(RID)
+    thk_oggm_in = thk_oggm_in.rio.reproject_match(dem)
+    thk_oggm_in = thk_oggm_in.fillna(0)
+    thk_oggm = np.zeros_like(dem.data[0])
+    thk_oggm = thk_oggm_in
+    thk_oggm.data[0][mask_in.data[0] == 0] = 0
+
+
     dhdt = crop_to_xarr(dhdt, dem)
 
     smb = np.ones_like(dem[0])
@@ -80,7 +88,11 @@ def write_input_file(RID, new_mask = False):
     # smooth input DEM
     k = np.ones((3,3))
     dem.data[0] = ndimage.convolve(dem.data[0], k)/9
-    topg = np.copy(dem)-1
+    topg = dem.data[0] - thk_oggm
+
+    slope = np.rad2deg(np.arctan(calc_slope(dem.data[0], dem.rio.resolution()[0])))
+    slope_mask = slope < 35
+    mask_in.data[0] *= slope_mask
 
     x = dem.x
     y = np.flip(dem.y)

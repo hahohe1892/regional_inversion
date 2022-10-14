@@ -190,14 +190,15 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
             mask_bw[boundary] = 1
         criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
         criterion[criterion!=1] = 0
-        criterion[smb<=0] = 0
+        #criterion[smb<=0] = 0
 
         h_inpaint = S_rec - B_rec
         h_inpaint[criterion==1] = np.nan
         h_inpaint = inpaint_nans(h_inpaint)
         B_rec = S_rec - h_inpaint
-        S_rec[criterion==1] = np.nan
-        S_rec = inpaint_nans(S_rec)
+        #S_rec[criterion == 1] = usurf[criterion == 1] + beta * theta*5 * misfit[criterion == 1]
+        #S_rec[criterion==1] = np.nan
+        #S_rec = inpaint_nans(S_rec)
         #B_rec[criterion==1]=S_rec[criterion==1]
         #S_rec[criterion==1]=usurf[criterion==1]
 
