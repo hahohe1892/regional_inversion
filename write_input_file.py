@@ -86,13 +86,13 @@ def write_input_file(RID, new_mask = False):
     apparent_mb = smb - dhdt_fit_field * 900
     #apparent_mb.data[0][mask_in.data[0] == 0] = 0
     # smooth input DEM
-    k = np.ones((3,3))
-    dem.data[0] = ndimage.convolve(dem.data[0], k)/9
+    #k = np.ones((3,3))
+    #dem.data[0] = ndimage.convolve(dem.data[0], k)/9
     topg = dem.data[0] - thk_oggm
 
-    slope = np.rad2deg(np.arctan(calc_slope(dem.data[0], dem.rio.resolution()[0])))
-    slope_mask = slope < 35
-    mask_in.data[0] *= slope_mask
+    #slope = np.rad2deg(np.arctan(calc_slope(dem.data[0], dem.rio.resolution()[0])))
+    #slope_mask = slope < 35
+    #mask_in.data[0] *= slope_mask
 
     x = dem.x
     y = np.flip(dem.y)

@@ -151,7 +151,7 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
 def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
     h_old = usurf - bed
-    h_old = h_old * mask
+    #h_old = h_old * mask
 
     # run PISM forward for dt years
     (h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(model, dt, bed, h_old, yield_stress)
@@ -192,10 +192,10 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
         criterion[criterion!=1] = 0
         #criterion[smb<=0] = 0
 
-        h_inpaint = S_rec - B_rec
-        h_inpaint[criterion==1] = np.nan
-        h_inpaint = inpaint_nans(h_inpaint)
-        B_rec = S_rec - h_inpaint
+        #h_inpaint = S_rec - B_rec
+        #h_inpaint[criterion==1] = np.nan
+        #h_inpaint = inpaint_nans(h_inpaint)
+        #B_rec = S_rec - h_inpaint
         #S_rec[criterion == 1] = usurf[criterion == 1] + beta * theta*5 * misfit[criterion == 1]
         #S_rec[criterion==1] = np.nan
         #S_rec = inpaint_nans(S_rec)
