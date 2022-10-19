@@ -373,16 +373,16 @@ def fill(data, invalid=None):
     ind = nd.distance_transform_edt(invalid, return_distances=False, return_indices=True)
     return data[tuple(ind)]
 
-def create_buffer(data, mask, width):
+def create_buffer(data, buffer_mask, width):
     data_orig = deepcopy(data)
     for i in range(width):
-        data[mask==0] = np.nan
-        boundary_mask = mask==0
+        data[buffer_mask==0] = np.nan
+        boundary_buffer_mask = buffer_mask==0
         k = np.ones((3,3),dtype=int)
-        boundary = ndimage.binary_dilation(boundary_mask==0, k) & boundary_mask
+        boundary = ndimage.binary_dilation(boundary_buffer_mask==0, k) & boundary_buffer_mask
         data[boundary==1] = fill(data)[boundary==1]
-        mask[boundary==1] = 1
-        data[mask==0] = data_orig[mask==0]
+        buffer_mask[boundary==1] = 1
+        data[buffer_mask==0] = data_orig[buffer_mask==0]
     return data
 
 

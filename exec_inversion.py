@@ -23,10 +23,10 @@ sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-
 #for RID in RIDs_Sweden:
 for i in range(1):
     try:
-        RID = 'RGI60-08.00021'
-        #RID = 'RGI60-08.00213' # Storglaciären
+        #RID = 'RGI60-08.00021'
+        RID = 'RGI60-08.00213' # Storglaciären
         #RID = 'RGI60-08.00223'
-        #RID = 'RGI60-08.00233'
+        #RID = 'RGI60-08.00146'
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
 
@@ -74,7 +74,7 @@ for i in range(1):
             "-o": working_dir + "/output.nc",
             "-output.timeseries.times": 1,
             "-output.timeseries.filename": working_dir + "/timeseries.nc",
-            "-output.extra.times": .1,
+            "-output.extra.times": .5,
             "-output.extra.file": working_dir + "/extra.nc",
             "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,climatic_mass_balance,rank,uvel,vvel",
             "-sea_level.constant.value": -10000,
@@ -85,7 +85,7 @@ for i in range(1):
         # and actual mass balance (use_apparent_mb = False)
         # use carfully to not mess up what is written in input file
 
-        use_apparent_mb = True
+        use_apparent_mb = False
         if rank == 0:
             if 'original_climatic_mass_balance' in NC(input_file).variables.keys(): # checks input file
                 raise ValueError('check whether apparent mass balance and actual mass balance are in the right spot in the input file; something is probably messed up here')
@@ -103,20 +103,20 @@ for i in range(1):
 
         comm.Barrier() #make sure that process on rank 0 is done before proceeding; perhaps not needed though
 
-        X, Y = np.meshgrid(x,y) 
-        nc_input = NC(input_file, 'r+')
-        mask_infile = nc_input['mask'][:,:]
-        cmb = nc_input['climatic_mass_balance'][:,:]
-        new_mb = np.zeros_like(Y)
-        new_mb[15:-15,15:-15] = (((Y - np.min(Y))-2000)/10)[15:-15,15:-15]
-        nc_input['climatic_mass_balance'][:,:] = new_mb
-        nc_input.close()
+        #X, Y = np.meshgrid(x,y) 
+        #nc_input = NC(input_file, 'r+')
+        #mask_infile = nc_input['mask'][:,:]
+        #cmb = nc_input['climatic_mass_balance'][:,:]
+        #new_mb = np.zeros_like(Y)
+        #new_mb[mask_infile == 1] = cmb[mask_infile==1]#(((Y - np.min(Y))-2000)/10)[5:-5,5:-5]
+        #nc_input['climatic_mass_balance'][:,:] = new_mb
+        #nc_input.close()
 
         pism = create_pism(input_file = input_file, options = options, grid_from_options = False)
 
-        nc_input = NC(input_file, 'r+')
-        nc_input['climatic_mass_balance'][:,:] = cmb
-        nc_input.close()
+        #nc_input = NC(input_file, 'r+')
+        #nc_input['climatic_mass_balance'][:,:] = cmb
+        #nc_input.close()
 
 
         if use_apparent_mb is True:
@@ -136,18 +136,21 @@ for i in range(1):
         mask[mask<0.5] = 0
         S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
         B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
-        #smb = read_variable(pism.grid(), input_file, 'apparent_mass_balance', 'kg m-2 year-1')
-        smb = np.zeros_like(dem)
-        tauc = np.ones_like(mask)*5e4
+        if use_apparent_mb is True:
+            smb = read_variable(pism.grid(), input_file, 'apparent_mass_balance', 'kg m-2 year-1')
+        else:
+            smb = read_variable(pism.grid(), input_file, 'climatic_mass_balance', 'kg m-2 year-1')
+        #smb = np.zeros_like(mask)
+        tauc = np.ones_like(mask)*5e5
 
         if use_apparent_mb is True:
-             dh_ref *= 0
+            dh_ref *= 0
         # set inversion paramters
         dt = .1
         beta = .25
-        theta = 0
+        theta = 0.05
         bw = 0
-        pmax = 500
+        pmax = 1000
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -158,22 +161,13 @@ for i in range(1):
         B_rec_all = []
         S_rec_all = []
         misfit_all = []
-        #B_rec = np.copy(S_rec)
 
-        ### make surface very smooth ###
-        S = np.copy(S_ref)
-        S[mask == 0] += 500
-        
-        for i in range(10):
-            S = ndimage.convolve(S, np.ones((3,3)))/9
-
-        #S_rec = np.copy(S)
-        
         ### mask out steep sections and where slope change is large ###
         slope = np.rad2deg(np.arctan(calc_slope(S_rec, res)))
-        #mask[slope > 25] = 0
-        slope_change = calc_slope(calc_slope(slope, res), res)
+        mask[slope > 20] = 0
+        slope_change = calc_slope(calc_slope(calc_slope(S_rec, res), res), res)
 
+        ### establish buffer to correct mask ###
         bw_m = 5
         mask_iter = mask == 1
         mask_bw = (~mask_iter)*1
@@ -182,14 +176,42 @@ for i in range(1):
             boundary_mask = mask_bw==0
             k = np.ones((3,3),dtype=int)
             boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
-            mask_bw[boundary] = bw_m-i
+            mask_bw[boundary] = 1
         criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
-        #criterion[criterion!=1] = 0
 
-        aoi = np.logical_and(slope_change>0.001, criterion == 1)
+        aoi = np.logical_and(slope_change**4>1e-19, criterion == 1)
+        mask -=aoi
 
-        #theta += theta * criterion * 3
-        #mask -=aoi
+        ### establish buffer lift up sides ###
+        bw_s = 20
+        mask_s = mask == 1
+        mask_bws = (~mask_s)*1
+        criterion_s = np.zeros_like(mask)
+        for i in range(bw_s):
+            boundary_mask_s = mask_bws==0
+            k = np.ones((3,3),dtype=int)
+            boundary_s = nd.binary_dilation(boundary_mask_s==0, k) & boundary_mask_s
+            mask_bws[boundary_s] += bw_s - i
+        criterion_s[3:-3,3:-3] = ((mask_bws + mask_s*1)-1)[3:-3,3:-3]
+        #dh_ref = ((-mask_bws**2+1))*dh_ref/15-11.35
+
+        mask_bws[mask==0] = 20
+        #S_rec = ndimage.convolve(S_rec, np.ones((3,3)))/(3**2)
+        for i in range(3):
+            mask_bws = ndimage.convolve(mask_bws, np.ones((3,3)))/9
+        S_rec += mask_bws - np.min(mask_bws)
+        S_rec[mask==0] += 20
+    
+        #S = np.copy(S_rec)
+        #buffer_mask = np.copy(mask)
+        #S = create_buffer(S, buffer_mask, 10)
+        #S[mask==0] += 20
+
+        #sw = 7
+        #for i in range(5):
+        #    S = ndimage.convolve(S, np.ones((sw,sw)))/(sw**2)
+
+        #S_rec = np.copy(S)
 
         ### derive initial bed from perfect plasticity ###
         dH = (np.max(S_rec[mask==1]) - np.min(S_rec[mask==1]))/1000
@@ -199,8 +221,12 @@ for i in range(1):
         H=((tau)*1e5)/(sin_slope*9.8*910)
         for i in range(5):
             H = ndimage.convolve(H, np.ones((3,3)))/9
-        B_rec = S_rec - H
+        #B_rec = S_rec - H
+        #S_rec[mask==0] = S_ref[mask==0]+50
+        B_rec[mask==0] = S_rec[mask==0]
+        B_rec = np.minimum(S_rec, B_rec)
 
+        '''
         ### start with tilted plane as surface ###
         mask *= 0
         mask[15:-15,15:-15] = 1
@@ -217,9 +243,10 @@ for i in range(1):
 
         # run PISM forward for dt years
         #(h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(pism, dt, B_rec, h_old, tauc)
-        
+        '''
+
         for p in range(pmax):
-            B_rec, S_rec, tauc_rec, misfit = iteration(pism,
+            B_rec, S_rec, tauc_rec, misfit, taud = iteration(pism,
                                                        B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), smb,
                                                        dt=dt,
                                                        beta=beta,
@@ -237,9 +264,10 @@ for i in range(1):
             B_rec_all.append(np.copy(B_rec))
             S_rec_all.append(np.copy(S_rec))
             misfit_all.append(misfit)
+            tauc = taud*.8
 
         pism.save_results()
         misfit_vs_iter = [np.mean(abs(x[mask == 1])) for x in misfit_all]
-    except ValueError:
+    except KeyError:
         continue
 
