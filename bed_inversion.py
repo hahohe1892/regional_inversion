@@ -133,6 +133,7 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     stress_balance_model = pism.stress_balance()
     diags                = stress_balance_model.diagnostics()
     velsurf              = diags["velsurf"].compute().local_part()
+    taud = diags["taud_mag"].compute().local_part()
 
     # extract U and V components and paste them into arrays with
     # "ghosts" to ensure that all arrays have the same shape:
@@ -145,7 +146,10 @@ def run_pism(pism, dt_years, bed_elevation, ice_thickness, yield_stress):
     v_surface = np.zeros_like(H)
     v_surface[w:-w, w:-w] = velsurf[:, :, 1]
 
-    return (H, mask, u_surface, v_surface, tauc, h_old)
+    taud = np.zeros_like(H)
+    taud[w:-w, w:-w] = diags["taud_mag"].compute().local_part()
+    
+    return (H, mask, u_surface, v_surface, tauc, h_old, taud)
 
 
 def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, beta, theta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
@@ -154,7 +158,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
     #h_old = h_old * mask
 
     # run PISM forward for dt years
-    (h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(model, dt, bed, h_old, yield_stress)
+    (h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old, taud) = run_pism(model, dt, bed, h_old, yield_stress)
 
     # set velocities to 0 outside mask
     u_rec = u_rec * mask * secpera
@@ -180,7 +184,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
     if bw > 0:
         # consider that in some cases, mass is only added to glacier through misfit
         #mask_iter = (S_rec*mask) > (B_rec * mask)
-        mask_iter = mask == 1
+        mask_iter = h_rec >= 10
         mask_bw = (~mask_iter)*1
         criterion = np.zeros_like(mask_iter)
         for i in range(bw):
@@ -190,12 +194,12 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
             mask_bw[boundary] = 1
         criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
         criterion[criterion!=1] = 0
-        #criterion[smb<=0] = 0
 
-        #h_inpaint = S_rec - B_rec
-        #h_inpaint[criterion==1] = np.nan
-        #h_inpaint = inpaint_nans(h_inpaint)
-        #B_rec = S_rec - h_inpaint
+        S_rec[criterion==1] = usurf[criterion==1]
+        h_inpaint = S_rec - B_rec
+        h_inpaint[criterion==1] = np.nan
+        h_inpaint = inpaint_nans(h_inpaint)
+        B_rec = S_rec - h_inpaint
         #S_rec[criterion == 1] = usurf[criterion == 1] + beta * theta*5 * misfit[criterion == 1]
         #S_rec[criterion==1] = np.nan
         #S_rec = inpaint_nans(S_rec)
@@ -227,7 +231,7 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
         vel_mismatch[np.isnan(vel_mismatch)]=0
         tauc_rec += vel_mismatch * tauc_rec
 
-    return B_rec, S_rec, tauc_rec, misfit
+    return B_rec, S_rec, tauc_rec, misfit, taud
 
 def iteration_friction_first(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, dt, beta, bw, update_friction, res, A, correct_diffusivity ='no', max_steps_PISM = 50, treat_ocean_boundary='no', contact_zone = None, ocean_mask = None):
         
