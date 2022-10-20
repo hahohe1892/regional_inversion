@@ -149,7 +149,7 @@ for i in range(1):
         dt = .1
         beta = .25
         theta = 0.05
-        bw = 0
+        bw = 1
         pmax = 1000
         p_friction = 1000
         max_steps_PISM = 25
@@ -193,25 +193,15 @@ for i in range(1):
             boundary_s = nd.binary_dilation(boundary_mask_s==0, k) & boundary_mask_s
             mask_bws[boundary_s] += bw_s - i
         criterion_s[3:-3,3:-3] = ((mask_bws + mask_s*1)-1)[3:-3,3:-3]
-        #dh_ref = ((-mask_bws**2+1))*dh_ref/15-11.35
+        dh_ref = ((-mask_bws**1.5+1))*dh_ref/15-3.42
 
         mask_bws[mask==0] = 20
         #S_rec = ndimage.convolve(S_rec, np.ones((3,3)))/(3**2)
         for i in range(3):
             mask_bws = ndimage.convolve(mask_bws, np.ones((3,3)))/9
-        S_rec += mask_bws - np.min(mask_bws)
-        S_rec[mask==0] += 20
+        #S_rec += mask_bws - np.min(mask_bws)
+        #S_rec[mask==0] += 20
     
-        #S = np.copy(S_rec)
-        #buffer_mask = np.copy(mask)
-        #S = create_buffer(S, buffer_mask, 10)
-        #S[mask==0] += 20
-
-        #sw = 7
-        #for i in range(5):
-        #    S = ndimage.convolve(S, np.ones((sw,sw)))/(sw**2)
-
-        #S_rec = np.copy(S)
 
         ### derive initial bed from perfect plasticity ###
         dH = (np.max(S_rec[mask==1]) - np.min(S_rec[mask==1]))/1000
