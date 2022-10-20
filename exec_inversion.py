@@ -24,8 +24,8 @@ sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-
 for i in range(1):
     try:
         #RID = 'RGI60-08.00021'
-        RID = 'RGI60-08.00213' # Storglaciären
-        #RID = 'RGI60-08.00223'
+        #RID = 'RGI60-08.00213' # Storglaciären
+        RID = 'RGI60-08.00188'
         #RID = 'RGI60-08.00146'
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
@@ -163,10 +163,15 @@ for i in range(1):
         misfit_all = []
 
         ### mask out steep sections and where slope change is large ###
-        slope = np.rad2deg(np.arctan(calc_slope(S_rec, res)))
-        mask[slope > 20] = 0
-        slope_change = calc_slope(calc_slope(calc_slope(S_rec, res), res), res)
+        data = np.copy(mask)
+        buffer_mask = np.copy(mask)
+        mask_b = create_buffer(data, buffer_mask,3)
+        mask = np.maximum(mask, mask_b)
 
+        slope = np.rad2deg(np.arctan(calc_slope(S_rec, res)))
+        mask[slope > 30] = 0
+        slope_change = calc_slope(calc_slope(calc_slope(S_rec, res), res), res)
+        
         ### establish buffer to correct mask ###
         bw_m = 5
         mask_iter = mask == 1
@@ -193,13 +198,16 @@ for i in range(1):
             boundary_s = nd.binary_dilation(boundary_mask_s==0, k) & boundary_mask_s
             mask_bws[boundary_s] += bw_s - i
         criterion_s[3:-3,3:-3] = ((mask_bws + mask_s*1)-1)[3:-3,3:-3]
-        dh_ref = ((-mask_bws**1.5+1))*dh_ref/15-3.42
+        #dh_ref = -mask_bws/28
+        #dh_mod = ((-mask_bws**2+1))*dh_ref/15-11.35
+        #dh_mod = ((-mask_bws**1.5+1))*dh_ref/15-3.42
+        #dh_mod = ((-mask_bws+1))*dh_ref/15-1.23
 
         mask_bws[mask==0] = 20
         #S_rec = ndimage.convolve(S_rec, np.ones((3,3)))/(3**2)
         for i in range(3):
             mask_bws = ndimage.convolve(mask_bws, np.ones((3,3)))/9
-        #S_rec += mask_bws - np.min(mask_bws)
+        S_rec += mask_bws - np.min(mask_bws)
         #S_rec[mask==0] += 20
     
 
@@ -215,6 +223,7 @@ for i in range(1):
         #S_rec[mask==0] = S_ref[mask==0]+50
         B_rec[mask==0] = S_rec[mask==0]
         B_rec = np.minimum(S_rec, B_rec)
+        B_rec[mask==1] = np.minimum(B_rec, B_rec - 50)[mask==1]
 
         '''
         ### start with tilted plane as surface ###
@@ -233,7 +242,7 @@ for i in range(1):
 
         # run PISM forward for dt years
         #(h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(pism, dt, B_rec, h_old, tauc)
-        '''
+p        '''
 
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit, taud = iteration(pism,
