@@ -23,10 +23,11 @@ sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-
 #for RID in RIDs_Sweden:
 for i in range(1):
     try:
-        #RID = 'RGI60-08.00021'
+        #RID = 'RGI60-08.00251'
         #RID = 'RGI60-08.00213' # Storglaciären
-        RID = 'RGI60-08.00188'
-        #RID = 'RGI60-08.00146'
+        #RID = 'RGI60-08.00188' # Rabots
+        #RID = 'RGI60-08.00202'
+        RID = 'RGI60-08.00227'
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
 
@@ -148,7 +149,7 @@ for i in range(1):
         # set inversion paramters
         dt = .1
         beta = .25
-        theta = 0.05
+        theta = 0.075
         bw = 1
         pmax = 1000
         p_friction = 1000
@@ -171,7 +172,10 @@ for i in range(1):
         slope = np.rad2deg(np.arctan(calc_slope(S_rec, res)))
         mask[slope > 30] = 0
         slope_change = calc_slope(calc_slope(calc_slope(S_rec, res), res), res)
-        
+        slope_change_new = np.gradient(calc_slope(calc_slope(S_rec, res), res))
+        slope_change_new = np.sqrt(slope_change_new[0]**2+ slope_change_new[1]**2)*np.sign(np.maximum(slope_change_new[0], slope_change_new[1]))
+
+        slope_change_new *= (slope_change_new<0)
         ### establish buffer to correct mask ###
         bw_m = 5
         mask_iter = mask == 1
@@ -184,7 +188,8 @@ for i in range(1):
             mask_bw[boundary] = 1
         criterion[3:-3,3:-3] = ((mask_bw + mask_iter*1)-1)[3:-3,3:-3]
 
-        aoi = np.logical_and(slope_change**4>1e-19, criterion == 1)
+        aoi = np.logical_and(slope_change**4>10e-20, criterion == 1)
+        aoi_new = np.logical_and(slope_change_new**2>1e-7, criterion == 1)
         mask -=aoi
 
         ### establish buffer lift up sides ###
@@ -207,10 +212,9 @@ for i in range(1):
         #S_rec = ndimage.convolve(S_rec, np.ones((3,3)))/(3**2)
         for i in range(3):
             mask_bws = ndimage.convolve(mask_bws, np.ones((3,3)))/9
-        S_rec += mask_bws - np.min(mask_bws)
+        #S_rec += mask_bws - np.min(mask_bws)
         #S_rec[mask==0] += 20
     
-
         ### derive initial bed from perfect plasticity ###
         dH = (np.max(S_rec[mask==1]) - np.min(S_rec[mask==1]))/1000
         tau = 0.005+1.598*dH-0.435*dH**2  #Haeberli and Hoelzle
@@ -242,7 +246,7 @@ for i in range(1):
 
         # run PISM forward for dt years
         #(h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(pism, dt, B_rec, h_old, tauc)
-p        '''
+        '''
 
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit, taud = iteration(pism,
@@ -270,3 +274,7 @@ p        '''
     except KeyError:
         continue
 
+
+B = np.copy(B_rec)
+for i in range(2):
+    B = ndimage.convolve(B, np.ones((3,3)))/9

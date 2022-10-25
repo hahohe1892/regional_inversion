@@ -232,7 +232,7 @@ def calc_slope(field, res):
     field_stag = stagger(field)
     dhdx = x_deriv(field_stag, res)
     dhdy = y_deriv(field_stag, res)
-    slope = np.sqrt(dhdx**2 + dhdy**2)
+    slope = np.sqrt(dhdx**2 + dhdy**2)#*np.sign(np.maximum(dhdx, dhdy))
 
     return slope
 
