@@ -16,13 +16,15 @@ def nc_out(RID, field, i=-1, file = 'output.nc'):
     return dem
 
 
-def out_to_tif(RID, field, i=-1, file = 'output.nc'):
+def out_to_tif(RID, field, i=-1, file = 'output.nc', threshold = np.nan):
     out = nc_out(RID, field, i, file = file)
     path = '/home/thomas/regional_inversion/output/' + RID + '/' + field + '.tif'
+    if not np.isnan(threshold):
+        out.data[0][out.data[0]<threshold] = out.attrs['_FillValue']
     out.rio.to_raster(path)
 
 
-def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970'):
+def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970', threshold=np.nan):
     ''' date should be given as "hh/dd/mm/yyyy'''
     glaciers_Sweden = get_RIDs_Sweden()
     RIDs_Sweden = glaciers_Sweden.RGIId
@@ -33,7 +35,7 @@ def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970'):
             date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
             file_time = os.path.getmtime(path)
             if file_time > date_unix:
-                out_to_tif(RID, field, file = file, i = ':')
+                out_to_tif(RID, field, file = file, i = ':', threshold = threshold)
                 shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/'+ field + '.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_' + field + '.tif')
         except FileNotFoundError:
             print('field {} does not exist for glacier {}'.format(field, RID))
@@ -85,5 +87,4 @@ def raw_mask_out_to_Win(field = 'mask', file = 'gridded_data.nc'):
         path_out = '/home/thomas/regional_inversion/input_data/outlines/raw_masks/mask_' + RID + '.tif'
         dem.rio.to_raster(path_out)
         shutil.copy(path_out, '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/08_rgi60_Scandinavia/raw_masks/mask_' + RID + '.tif')
-
 

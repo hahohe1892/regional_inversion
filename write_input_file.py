@@ -51,11 +51,12 @@ def write_input_file(RID, new_mask = False):
     smb = np.ones_like(dem[0])
     heights = dem.data.flatten()
     gdir = load_dem_gdir(RID)[0]
-    mbmod = massbalance.MultipleFlowlineMassBalance(gdir)
-    mbmod1 = mbmod.flowline_mb_models[0]
+    #mbmod = massbalance.MultipleFlowlineMassBalance(gdir)
+    mbmod = massbalance.PastMassBalance(gdir, check_calib_params = False)
+    #mbmod1 = mbmod.flowline_mb_models[0]
     mb_years = []
     for year in range(2010, 2015+1):
-        mb_years.append(mbmod1.get_annual_mb(heights, year=year) * secpera * 900)
+        mb_years.append(mbmod.get_annual_mb(heights, year=year) * secpera * 900)
     mb = [heights, np.mean(np.array(mb_years), axis = 0)]
 
     for i in range(dem.data[0].shape[0]):
@@ -164,8 +165,8 @@ def get_dhdt(RID, dems, dhdts):
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in RIDs_Sweden:
-    write_input_file(RID, new_mask = True)
+#for RID in RIDs_Sweden:
+#    write_input_file(RID, new_mask = True)
 
     
 def correct_mask(RID):
