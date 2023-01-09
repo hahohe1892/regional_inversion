@@ -24,10 +24,10 @@ sample_glaciers = ['RGI60-08.00005', 'RGI60-08.00146', 'RGI60-08.00233', 'RGI60-
 for i in range(1):
     try:
         #RID = 'RGI60-08.00251'
-        #RID = 'RGI60-08.00213' # Storglaciären
+        RID = 'RGI60-08.00213' # Storglaciären
         #RID = 'RGI60-08.00188' # Rabots
         #RID = 'RGI60-08.00202'
-        RID = 'RGI60-08.00227'
+        #RID = 'RGI60-08.00227'
         working_dir = '/home/thomas/regional_inversion/output/' + RID
         input_file = working_dir + '/input.nc'
 
@@ -247,7 +247,7 @@ for i in range(1):
         # run PISM forward for dt years
         #(h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(pism, dt, B_rec, h_old, tauc)
         '''
-
+        break
         for p in range(pmax):
             B_rec, S_rec, tauc_rec, misfit, taud = iteration(pism,
                                                        B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), smb,
@@ -275,6 +275,6 @@ for i in range(1):
         continue
 
 
-B = np.copy(B_rec)
-for i in range(2):
-    B = ndimage.convolve(B, np.ones((3,3)))/9
+#B = np.copy(B_rec)
+#for i in range(2):
+#    B = ndimage.convolve(B, np.ones((3,3)))/9

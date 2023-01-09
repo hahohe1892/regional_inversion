@@ -4,7 +4,7 @@ from scipy.ndimage import label
 import numpy as np
 import rasterio
 
-def get_georeferenced_mosaic(path = '/home/thomas/regional_inversion/input_data/outlines/georeferenced_mask_mosaic.tif'):
+def get_georeferenced_mosaic(path = '/mnt/e/numbered_georeferenced_mask_mosaic21.tif'):
     geo_mosaic = rioxr.open_rasterio(path)
     return geo_mosaic
 
@@ -60,6 +60,27 @@ def mask_from_shapefile(RID, all_shapes):
     return mask_new
 
 
+def mask_from_numbered_mosaic(RID, mosaic, all_shapes):
+    mask_old = load_mask_path(RID)
+    crs_safe_copy = load_mask_path(RID)
+    mask_old = mask_old.rio.reproject(mosaic.rio.crs)
+
+    #geodf = gpd.GeoDataFrame(geometry=[box(mask_old.x.min(), mask_old.y.min(), mask_old.x.max(), mask_old.y.max())], crs=mask_old.rio.crs)
+    #geodf = geodf.to_crs(mosaic.rio.crs)
+    #mosaic_c = rioxr.open_rasterio('/mnt/e/numbered_georeferenced_mask_mosaic21.tif', masked=True).rio.clip(geodf['geometry'], from_disk = True)
+    mosaic_c = crop_to_xarr(mosaic, mask_old, from_disk = True)
+    glacier_index = np.where(all_shapes.RGIId == RID)[0].squeeze()
+    new_mask_data = deepcopy(mosaic_c)
+    new_mask_data.data[0] = (new_mask_data[0] == glacier_index)*1
+    new_mask_data = new_mask_data.rio.reproject_match(crs_safe_copy)
+    #new_mask_data = new_mask_data.rio.reproject(crs_safe_copy.rio.crs, dst_nodata = 0)
+    new_mask_data.data[0][new_mask_data.data[0] == 65535] = 0
+    #new_mask_data = crop_to_xarr(new_mask_data, crs_safe_copy)
+    #new_mask_data = new_mask_data.rio.reproject(new_mask_data.rio.crs, shape=crs_safe_copy.shape[1:], resampling = Resampling.bilinear)
+    
+    #mosaic_c = mosaic_c.rio.reproject_match(crs_safe_copy)
+    return new_mask_data
+
 
 # originally, I tried to use a georeferenced raster that contained all glaciers. I tried to extract individual
 # glaciers from that raster. Although this worked in general, it clustered glaciers together if their
@@ -71,9 +92,9 @@ if __name__ == '__main__':
     RIDs = get_RIDs_Sweden()
     RIDs_Sweden = RIDs.RGIId
     all_shapes = gpd.read_file("/home/thomas/regional_inversion/input_data/outlines/08_rgi60_Scandinavia_georeferenced.shp")
-    #mosaic = get_georeferenced_mosaic()
+    mosaic = get_georeferenced_mosaic()
     for RID in RIDs_Sweden:
-        new_mask = mask_from_shapefile(RID, all_shapes)
+        new_mask = mask_from_numbered_mosaic(RID, mosaic, all_shapes)
         new_mask.rio.to_raster('/home/thomas/regional_inversion/input_data/outlines/georeferenced_masks/mask_{}_new.tif'.format(RID))
         #produce_new_mask(RID, mosaic)
         print('glacier {} done'.format(RID))
