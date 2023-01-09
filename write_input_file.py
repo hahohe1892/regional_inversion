@@ -26,17 +26,22 @@ def write_input_file(RID, new_mask = False):
     dem = load_dem_path(RID)
     if new_mask == True:
         mask_in = load_georeferenced_mask(RID)
+        # decide buffer around glacier; here based on centering mask and taking this as standard extent
+        mask_in = crop_to_new_mask(mask_in, mask_in, 10)
+        dem = dem.rio.reproject_match(mask_in)
     else:
         mask_in = load_mask_path(RID)
         mask_in.data[0][mask_in.data[0] == mask_in.rio.nodata] = 0
+        # decide buffer around glacier; below is standard procedure to crop as is done with OGGM
+        dem = crop_border_xarr(dem)
+        mask_in = mask_in.rio.reproject_match(dem)
+        mask_in.data[0][:2,:] = 0
+        mask_in.data[0][:,:2] = 0
+        mask_in.data[0][-2:,:] = 0
+        mask_in.data[0][:,-2:] = 0
+
     dhdt = load_dhdt_path(RID, period = period)
 
-    dem = crop_border_xarr(dem)
-    mask_in = mask_in.rio.reproject_match(dem)
-    mask_in.data[0][:2,:] = 0
-    mask_in.data[0][:,:2] = 0
-    mask_in.data[0][-2:,:] = 0
-    mask_in.data[0][:,-2:] = 0
 
     thk_oggm_in = load_thk_path(RID)
     thk_oggm_in = thk_oggm_in.rio.reproject_match(dem)
@@ -68,11 +73,11 @@ def write_input_file(RID, new_mask = False):
     if A > 1000*2:
         output = 'large'
         dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dems_large, dhdts_large)
+        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_large, dhdts_large)
     else:
         output = 'small'
         dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dems_small, dhdts_small)
+        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_small, dhdts_small)
 
     # modify either smb or dhdt so that they balance
     k = 0
@@ -135,15 +140,13 @@ def partition_dhdt(output = 'all'):
     return dems_large, dems_small, dhdts_large, dhdts_small
 
 
-def get_dhdt(RID, dems, dhdts):
+def get_dhdt(RID, dem, dems, dhdts):
     sum_arr = np.load('/home/thomas/regional_inversion/all_dhdt_dem.npy')
     dems_m = sm.add_constant(dems)
     res = sm.OLS(dhdts, dems_m).fit()
     loc = sum_arr[0] == RID
     dem_scaled = sum_arr[1, loc].astype(float)
     dhdt = sum_arr[2, loc].astype(float)
-    dem = load_dem_path(RID)
-    dem = crop_border_xarr(dem)
 
     ks =[0]
     misfit = 100
@@ -165,8 +168,8 @@ def get_dhdt(RID, dems, dhdts):
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-#for RID in RIDs_Sweden:
-#    write_input_file(RID, new_mask = True)
+for RID in RIDs_Sweden:
+    write_input_file(RID, new_mask = True)
 
     
 def correct_mask(RID):

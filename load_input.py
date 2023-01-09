@@ -33,17 +33,17 @@ def load_mask_path(RID, mask_new = False):
         if mask_new is True:
             mask = nc.variables['mask_new'][:]
             tif = rioxr.open_rasterio(path_tif)
-            tif.data[0, :, :] = np.copy(mask).T
+            tif.data[0, :, :] = (mask).T
         else:
             mask = nc.variables['glacier_mask'][:]
             tif = rioxr.open_rasterio(path_tif)
-            tif.data[0, :, :] = np.copy(mask)
+            tif.data[0, :, :] = mask
 
     return tif
 
 
 def load_georeferenced_mask(RID):
-    path = glacier_dir + 'outlines/georeferenced_masks/mask_{}.tif'.format(RID)
+    path = glacier_dir + 'outlines/georeferenced_masks/mask_{}_new.tif'.format(RID)
     mask = rioxr.open_rasterio(path)
 
     return mask
@@ -82,12 +82,28 @@ def crop_border_xarr(xarr, pixels=150):
     return clipped
 
 
-def crop_to_xarr(xarr_target, xarr_source):
+def crop_to_new_mask(xarr, mask, pixels):
+    x_grid, y_grid = np.meshgrid(xarr.x, xarr.y)
+    res = xarr.rio.resolution()[0]
+    x_min = np.min(x_grid[mask.data[0]==1]) - pixels * res
+    x_max = np.max(x_grid[mask.data[0]==1]) + pixels * res
+    y_min = np.min(y_grid[mask.data[0]==1]) - pixels * res
+    y_max = np.max(y_grid[mask.data[0]==1]) + pixels * res
+    geodf = gpd.GeoDataFrame(
+        geometry=[
+            box(x_min, y_min, x_max, y_max)],
+        crs=xarr.rio.crs)
+    clipped = xarr.rio.clip(geodf.geometry)
+
+    return clipped
+
+        
+def crop_to_xarr(xarr_target, xarr_source, from_disk=False):
     geodf = gpd.GeoDataFrame(
         geometry=[
             box(xarr_source.x.min(), xarr_source.y.min(), xarr_source.x.max(), xarr_source.y.max())],
         crs=xarr_source.rio.crs)
-    clipped = xarr_target.rio.clip(geodf.geometry, all_touched = True)
+    clipped = xarr_target.rio.clip(geodf.geometry, all_touched = True, from_disk=from_disk)
 
     return clipped
 
