@@ -6,6 +6,7 @@ import os
 import shutil
 from oggm.core import massbalance
 import statsmodels.api as sm
+import xarray as xr
 
 def write_input_file(RID, new_mask = False):
     working_dir = '/home/thomas/regional_inversion/output/' + RID
@@ -105,24 +106,35 @@ def write_input_file(RID, new_mask = False):
     y = np.flip(dem.y)
 
     dem.name = 'usurf'
+    dem = dem.squeeze()
     topg.name = 'topg'
+    topg = topg.squeeze()
     mask_in.name = 'mask'
+    mask_in = mask_in.squeeze()
     dhdt_fit_field.name = 'dhdt'
-    smb.name = 'climatic mass balance'
-    apparent_mb.name = 'apparent mass balance'
+    dhdt_fit_field = dhdt_fit_field.squeeze()
+    smb.name = 'climatic_mass_balance'
+    smb.attrs['units'] = 'kg m-2 year-1'
+    smb = smb.squeeze()
+    apparent_mb.name = 'apparent_mass_balance'
+    apparent_mb = apparent_mb.squeeze()
     ice_surface_temperature = deepcopy(dem)
-    ice_surface_temperature.data[0] = np.ones_like(dem.data[0])*273
-    ice_surface_temperature.name = 'ice surface temp'
+    ice_surface_temperature.data = np.ones_like(dem.data)*273
+    ice_surface_temperature.name = 'ice_surface_temp'
     thk = dem - topg
     thk.name = 'thk'
 
-    all_xr = xr.merge([dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temperature])
+    all_xr = xr.merge([thk, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temperature])
+    all_xr = all_xr.reindex(y=list(reversed(all_xr.y)))
+    all_xr.to_netcdf(input_file)
     #create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temp=273) 
 
 
-def smart_merge_xarray(inputs, names):
-    new_xr = xr.merge(inputs, names
-    
+glaciers_Sweden = get_RIDs_Sweden()
+RIDs_Sweden = glaciers_Sweden.RGIId
+
+#for RID in RIDs_Sweden:
+#    write_input_file(RID, new_mask = True)
 
 def partition_dhdt(output = 'all'):
     sum_arr = np.load('/home/thomas/regional_inversion/all_dhdt_dem.npy')
@@ -184,13 +196,6 @@ def get_dhdt(RID, dem, dems, dhdts):
     return dhdt_fit, dhdt_fit_field, dem_scaled
 
 
-glaciers_Sweden = get_RIDs_Sweden()
-RIDs_Sweden = glaciers_Sweden.RGIId
-
-#for RID in RIDs_Sweden:
-#    write_input_file(RID, new_mask = True)
-
-    
 def correct_mask(RID):
     dem = load_dem_path(RID)
     mask = load_mask_path(RID)

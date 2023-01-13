@@ -409,3 +409,54 @@ def pl3d(X, Y, Z, mask, **kwargs):
     mask_nan[mask == 1] = Z[mask == 1] + 10
     ax.plot_surface(x, y, mask_nan, color = 'r')
     plt.show()
+
+
+def qsplot(x,y,ux,uv,flux = None, thk = None, show = True, **kwargs):
+    if flux is None:
+        flux = np.ones_like(ux)
+    if hasattr(ux, 'attrs'):
+        ux.data[ux.data == ux.attrs['_FillValue']]  = np.nan
+        uv.data[uv.data == uv.attrs['_FillValue']]  = np.nan
+
+    if x[0] > x[-1]:
+        x = np.flip(x)
+        ux = -1 * ux
+    if y[0] > y[-1]:
+        y = np.flip(y)
+        uv = -1 * uv
+    if thk is not None:
+        thk_kwargs = {}
+        if 'vmin_t' in kwargs:
+            thk_kwargs['vmin'] = kwargs['vmin_t']
+            del kwargs['vmin_t']
+        if 'vmax_t' in kwargs:
+            thk_kwargs['vmax'] = kwargs['vmax_t']
+            del kwargs['vmax_t']
+        plt.pcolor(x,y,thk, cmap = 'twilight', **thk_kwargs)
+    plt.streamplot(x, y, ux, uv, **kwargs)
+    plt.quiver(x, y, ux, uv, flux, cmap = 'jet')
+    if show == True:
+        plt.show()
+
+
+def movieqs(extra, step=1, file_name = 'animation.mp4', **kwargs):
+    ux = extra[1]['uvelsurf']
+    uv = extra[1]['vvelsurf']
+    x = extra[1].x.data
+    y = extra[1].y.data
+    flux = extra[1]['flux_mag']
+    thk = extra[1]['thk']
+    usurf = extra[1]['usurf']
+
+    max_thk = np.max(thk.data)
+    fig = plt.figure()
+    camera = Camera(fig)
+    for i in range(0, len(ux), step):
+        dy, dx = np.gradient(usurf[i]*ux[i]/ux[i])
+        #qsplot(x,y,-dx, dy, flux[i], thk[i], show = False, density = 3, color = 'w', linewidth = .3, vmax_t = max_thk, broken_streamlines = False)
+        qsplot(x,y,ux[i], uv[i], flux[i], thk[i], show = False, density = 3, color = 'w', linewidth = .3, vmax_t = max_thk, broken_streamlines = False)
+        camera.snap()
+    animation = camera.animate()
+    animation.save(file_name, dpi = 300)
+    cmd = ['xdg-open', file_name]
+    subprocess.call(cmd)
