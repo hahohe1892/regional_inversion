@@ -415,8 +415,16 @@ def qsplot(x,y,ux,uv,flux = None, thk = None, show = True, **kwargs):
     if flux is None:
         flux = np.ones_like(ux)
     if hasattr(ux, 'attrs'):
-        ux.data[ux.data == ux.attrs['_FillValue']]  = np.nan
-        uv.data[uv.data == uv.attrs['_FillValue']]  = np.nan
+        if '_FillValue' in ux.attrs:
+            ux.data[ux.data == ux.attrs['_FillValue']]  = np.nan
+            uv.data[uv.data == uv.attrs['_FillValue']]  = np.nan
+    thk_kwargs = {}
+    if 'vmin_t' in kwargs:
+        thk_kwargs['vmin'] = kwargs['vmin_t']
+        del kwargs['vmin_t']
+    if 'vmax_t' in kwargs:
+        thk_kwargs['vmax'] = kwargs['vmax_t']
+        del kwargs['vmax_t']
 
     if x[0] > x[-1]:
         x = np.flip(x)
@@ -425,13 +433,6 @@ def qsplot(x,y,ux,uv,flux = None, thk = None, show = True, **kwargs):
         y = np.flip(y)
         uv = -1 * uv
     if thk is not None:
-        thk_kwargs = {}
-        if 'vmin_t' in kwargs:
-            thk_kwargs['vmin'] = kwargs['vmin_t']
-            del kwargs['vmin_t']
-        if 'vmax_t' in kwargs:
-            thk_kwargs['vmax'] = kwargs['vmax_t']
-            del kwargs['vmax_t']
         plt.pcolor(x,y,thk, cmap = 'twilight', **thk_kwargs)
     plt.streamplot(x, y, ux, uv, **kwargs)
     plt.quiver(x, y, ux, uv, flux, cmap = 'jet')
@@ -440,21 +441,37 @@ def qsplot(x,y,ux,uv,flux = None, thk = None, show = True, **kwargs):
 
 
 def movieqs(extra, step=1, file_name = 'animation.mp4', **kwargs):
-    ux = extra[1]['uvelsurf']
-    uv = extra[1]['vvelsurf']
-    x = extra[1].x.data
-    y = extra[1].y.data
-    flux = extra[1]['flux_mag']
-    thk = extra[1]['thk']
-    usurf = extra[1]['usurf']
+    try:
+        ux = extra[1]['uvelsurf']
+        uv = extra[1]['vvelsurf']
+        if hasattr(ux, 'attrs'):
+            if '_FillValue' in ux.attrs:
+                ux.data[ux.data == ux.attrs['_FillValue']]  = np.nan
+                uv.data[uv.data == uv.attrs['_FillValue']]  = np.nan
 
+        x = extra[1].x.data
+        y = extra[1].y.data
+        flux = extra[1]['flux_mag']
+        thk = extra[1]['thk']
+        usurf = extra[1]['usurf']
+    except(KeyError):
+        ux = extra['uvelsurf']
+        uv = extra['vvelsurf']
+        x = extra.x.data
+        y = extra.y.data
+        flux = extra['flux_mag']
+        thk = extra['thk']
+        usurf = extra['usurf']
     max_thk = np.max(thk.data)
+    start_points_x = np.meshgrid(x,y)[0][~np.isnan(ux[0].data)]
+    start_points_y = np.meshgrid(x,np.flip(y))[1][~np.isnan(ux[0].data)]
+
     fig = plt.figure()
     camera = Camera(fig)
     for i in range(0, len(ux), step):
         dy, dx = np.gradient(usurf[i]*ux[i]/ux[i])
-        #qsplot(x,y,-dx, dy, flux[i], thk[i], show = False, density = 3, color = 'w', linewidth = .3, vmax_t = max_thk, broken_streamlines = False)
-        qsplot(x,y,ux[i], uv[i], flux[i], thk[i], show = False, density = 3, color = 'w', linewidth = .3, vmax_t = max_thk, broken_streamlines = False)
+        #qsplot(x,y,-dx, dy, flux[i], thk[i], show = False, density = 3, color = 'w', linewidth = .3, vmax_t = max_thk, broken_streamlines = False, arrowsize = 1e-10, start_points = np.array([start_points_x, start_points_y]).T)
+        qsplot(x,y,ux[i], uv[i], flux[i], thk[i], show = False, color = 'w', linewidth = .1, vmax_t = max_thk, broken_streamlines = False, arrowsize = 1e-10, start_points = np.array([start_points_x, start_points_y]).T)
         camera.snap()
     animation = camera.animate()
     animation.save(file_name, dpi = 300)
