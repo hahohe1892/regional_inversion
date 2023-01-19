@@ -19,30 +19,37 @@ RIDs_Sweden = [RID]
 for RID in RIDs_Sweden:
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
-
+    resolution = 100
+    
     dem = load_dem_path(RID)
     dem = crop_border_xarr(dem)
 
     input_pism = rioxr.open_rasterio(input_file)
     input_pism = input_pism.rio.write_crs(dem.rio.crs)
-    input_igm = input_pism.rio.reproject(input_pism.rio.crs, resolution = (100,100), nodata=0)
+    input_igm = input_pism.rio.reproject(input_pism.rio.crs, resolution = (resolution,resolution), resampling = Resampling.bilinear)
     input_igm.ice_surface_temp.data = np.ones_like(input_igm.ice_surface_temp)*273
     input_igm = input_igm.squeeze()
     input_igm = input_igm.reindex(y=list(reversed(input_igm.y)))
+    for var in input_igm.data_vars:
+        input_igm.data_vars[var].data = input_igm.data_vars[var].rio.interpolate_na()
+
     input_igm.to_netcdf(working_dir + '/input_igm.nc')
 
-    S_ref = input_igm.usurf.data
-    #S_ref = gauss_filter(S_ref, 1, 2)
+    dummy_var = input_igm.usurf
+    
+    S_ref = deepcopy(input_igm.usurf.data)
+    S_ref = gauss_filter(S_ref, 1, 3)
     B_init = input_igm.topg.data
     dh_ref = input_igm.dhdt.data
     smb = input_igm.climatic_mass_balance.data
     a_smb = input_igm.apparent_mass_balance.data
     mask = input_igm.mask.data
+    B_init[mask == 0] = S_ref[mask == 0]
 
     dt = 1
     pmax = 1000
     beta = 1
-    theta = 0.002
+    theta = 0.02
     bw = 0
     p_save = 10
 
@@ -60,16 +67,16 @@ for RID in RIDs_Sweden:
     B_rec_all = []
     misfit_all = []
     glacier = Igm()
-    glacier.config.tstart                 = 0
-    glacier.config.tend                   = dt
-    glacier.config.tsave                  = dt * 10
-    glacier.config.cfl                    = 0.3
-    glacier.config.init_slidingco         = 0
-    glacier.config.init_arrhenius         = 78
+    glacier.config.tstart = 0
+    glacier.config.tend = dt
+    glacier.config.tsave = dt * 10
+    glacier.config.cfl = 0.3
+    glacier.config.init_slidingco = 6
+    glacier.config.init_arrhenius = 78
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.append('velbase_mag')
     glacier.config.geology_file = working_dir + '/input_igm.nc'
-    glacier.config.iceflow_model_lib_path = '/home/thomas/regional_inversion/igm/f15_cfsflow_GJ_22_a/100'
+    glacier.config.iceflow_model_lib_path = '/home/thomas/regional_inversion/igm/f15_cfsflow_GJ_22_a/{}'.format(resolution)
     glacier.initialize()
     with tf.device(glacier.device_name):
         glacier.load_ncdf_data(glacier.config.geology_file)
@@ -81,7 +88,12 @@ for RID in RIDs_Sweden:
         glacier.usurf.assign(S_ref)
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)#np.zeros_like(glacier.topg))
         p = 0
+        left_sum = []
+        s_refresh = 50000
         while p < pmax:
+            if p > 0 and p%s_refresh == 0:
+                glacier.usurf.assign(S_ref)
+                theta *= 3
             S_old = glacier.usurf.numpy()
             while glacier.t < glacier.config.tend:
 
@@ -93,21 +105,22 @@ for RID in RIDs_Sweden:
                     glacier.update_ncdf_ex()
                     glacier.update_ncdf_ts()
 
-            #glacier.icemask.assign(mask)
+            dhdt = (glacier.usurf - S_old)/dt
 
-            dhdt = (glacier.usurf - S_old)/dt 
-            misfit = (dhdt) + (S_ref - S_old) # - dh_ref)
-
+            misfit = (dhdt) #+ (S_ref - S_old) # - dh_ref)
+            left_sum.append(np.sum(dhdt*(-mask+1)))
             # update surface
             S_old[mask == 1] = S_old[mask == 1] + theta * beta * misfit.numpy()[mask == 1]
-            #S_ref = gauss_filter(S_ref, .3, 2)
             glacier.usurf.assign(S_old)
 
             # update bed and thickness
             new_bed = glacier.topg.numpy() - beta * misfit.numpy()
             new_bed[mask == 0] = B_init[mask == 0]
-            new_bed[np.where(buffer == 1)] = np.nan
-            new_bed = inpaint_nans(new_bed)
+            new_bed[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
+            dummy_var.data = new_bed
+            dummy_var = dummy_var.rio.interpolate_na()
+            new_bed = dummy_var.data
+
             glacier.topg.assign(np.minimum(glacier.usurf, new_bed))
             glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)
 

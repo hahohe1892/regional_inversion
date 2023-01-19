@@ -388,14 +388,14 @@ def create_buffer(data, buffer_mask, width):
 
 def dp(field1, field2, vmin = -2, vmax = 2, cmap='RdBu'):
     fig, ax = plt.subplots()
-    field = ax.pcolor(field1 - field2, cmap=cmap, vmin=vmin, vmax=vmax)
+    field = ax.imshow(field1 - field2, cmap=cmap, vmin=vmin, vmax=vmax)
     fig.colorbar(field, ax=ax)
     plt.show()
 
 
 def pl(field, **kwargs):
     fig, ax = plt.subplots()
-    f = ax.pcolor(field, **kwargs)
+    f = ax.imshow(field, **kwargs)
     fig.colorbar(f, ax = ax)
     plt.show()
 
