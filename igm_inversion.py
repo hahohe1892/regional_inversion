@@ -11,16 +11,17 @@ from write_output import *
 
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00188' # Rabots
-RID = 'RGI60-08.00005' # Salajekna
+#RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
+#RID = 'RGI60-08.00121' # Mikkajekna
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
-RIDs_Sweden = [RID]
+#RIDs_Sweden = [RID]
 for RID in RIDs_Sweden:
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     resolution = 100
-    
+
     dem = load_dem_path(RID)
     dem = crop_border_xarr(dem)
 
@@ -36,18 +37,20 @@ for RID in RIDs_Sweden:
     input_igm.to_netcdf(working_dir + '/input_igm.nc')
 
     dummy_var = input_igm.usurf
-    
+
     S_ref = deepcopy(input_igm.usurf.data)
-    S_ref = gauss_filter(S_ref, 1, 3)
     B_init = input_igm.topg.data
     dh_ref = input_igm.dhdt.data
     smb = input_igm.climatic_mass_balance.data
     a_smb = input_igm.apparent_mass_balance.data
     mask = input_igm.mask.data
+    #S_ref[mask==0] = np.nan
+    S_ref = gauss_filter(S_ref, 1, 3)
+    #S_ref[mask==0] = input_igm.usurf.data[mask==0]
     B_init[mask == 0] = S_ref[mask == 0]
 
     dt = 1
-    pmax = 1000
+    pmax = 1500
     beta = 1
     theta = 0.02
     bw = 0
@@ -83,7 +86,7 @@ for RID in RIDs_Sweden:
         glacier.initialize_fields()
 
         glacier.icemask.assign(mask)
-        glacier.smb.assign(a_smb/900 * glacier.icemask)
+        glacier.smb.assign((0.0 + a_smb/900) * glacier.icemask)
         glacier.topg.assign(B_init)
         glacier.usurf.assign(S_ref)
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)#np.zeros_like(glacier.topg))
@@ -116,15 +119,31 @@ for RID in RIDs_Sweden:
             # update bed and thickness
             new_bed = glacier.topg.numpy() - beta * misfit.numpy()
             new_bed[mask == 0] = B_init[mask == 0]
+            bed_before_buffer = deepcopy(new_bed)
+            buffer *= (glacier.smb.numpy()<0)
             new_bed[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
             dummy_var.data = new_bed
             dummy_var = dummy_var.rio.interpolate_na()
             new_bed = dummy_var.data
+            left_sum[-1] += np.sum(new_bed - bed_before_buffer)
+            left_sum[-1] += np.sum(np.maximum(new_bed - glacier.usurf, 0))
+            new_bed = np.minimum(glacier.usurf, new_bed)
 
-            glacier.topg.assign(np.minimum(glacier.usurf, new_bed))
+            if p == (pmax - 500):
+                left_sum_mean = np.mean(left_sum[-100:])
+                #abl_area_size = len(np.nonzero(glacier.smb<0)[0])
+                abl_area_size = len(np.nonzero(np.logical_and(glacier.thk<10, mask == 1))[0])
+                left_sum_per_area = left_sum_mean / abl_area_size
+                smb_new = a_smb/900
+                #smb_new[glacier.smb<0] += left_sum_per_area
+                smb_new[np.logical_and(glacier.thk<10, mask == 1)] += left_sum_per_area
+                glacier.smb.assign(smb_new)
+                #new_bed[np.logical_and(glacier.thk<10, mask == 1)] -= left_sum_per_area
+
+            glacier.topg.assign(new_bed)
             glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)
 
-            #save data
+            # save data
             B_rec_all.append(glacier.thk.numpy())
             misfit_all.append(misfit)
 
