@@ -7,19 +7,21 @@ import shutil
 from oggm.core import massbalance
 import statsmodels.api as sm
 import xarray as xr
+from copy import deepcopy
 
-def write_input_file(RID, new_mask = False):
+def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolution = None, fit_dhdt_regionally = True, modify_dhdt_or_smb = 'smb'):
+
+    # default DEM (COPDEM) is from 2010 - 2015
+    
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     input_dir = '/home/thomas/regional_inversion/input_data/'
 
-    # default DEM (COPDEM) is from 2010 - 2015
-    period = '2010-2015'
-    dhdt_dir = input_dir + 'dhdt_' + period + '/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID 
+    RGI_region = RID.split('-')[1].split('.')[0]
+    #dhdt_dir = input_dir + 'dhdt_' + period + '/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID 
 
-
-    if not os.path.exists(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID):
-        shutil.copyfile(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID + '/gridded_data.nc', input_file)
+    if not os.path.exists(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID):
+        shutil.copyfile(input_dir + 'dhdt_2000-2020/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID + '/gridded_data.nc', input_file)
 
     if not os.path.isdir(working_dir):
         os.mkdir(working_dir)
@@ -62,7 +64,10 @@ def write_input_file(RID, new_mask = False):
     mbmod = massbalance.PastMassBalance(gdir, check_calib_params = False)
     #mbmod1 = mbmod.flowline_mb_models[0]
     mb_years = []
-    for year in range(2010, 2015+1):
+    mb_start_yr = int(period.split('-')[0])
+    mb_end_yr = int(period.split('-')[1])
+    mb_end_yr = np.minimum(mb_end_yr, 2019-1) #oggm smb calculation goes only until 2019, and -1 because of next line
+    for year in range(mb_start_yr, mb_end_yr+1):
         mb_years.append(mbmod.get_annual_mb(heights, year=year) * secpera * 900)
     mb = [heights, np.mean(np.array(mb_years), axis = 0)]
 
@@ -70,16 +75,20 @@ def write_input_file(RID, new_mask = False):
         for j in range(dem.data[0].shape[1]):
             smb.data[0][i,j] = (mb[1][mb[0] == dem.data[0][i,j]])[0]
 
-    # calculate dhdt based on regional fitting of elevation trend
-    A = gdir.rgi_area_m2
-    if A > 1000*2:
-        output = 'large'
-        dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_large, dhdts_large)
+    if fit_dhdt_regionally is True:
+        # calculate dhdt based on regional fitting of elevation trend
+        A = gdir.rgi_area_m2
+        if A > 1000*2:
+            output = 'large'
+            dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
+            dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_large, dhdts_large)
+        else:
+            output = 'small'
+            dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
+            dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_small, dhdts_small)
+
     else:
-        output = 'small'
-        dems_large, dems_small, dhdts_large, dhdts_small = partition_dhdt(output=output)
-        dhdt_fit, dhdt_fit_field, dem_masked = get_dhdt(RID, dem, dems_small, dhdts_small)
+        dhdt_fit_field = deepcopy(dhdt)
 
     # modify either smb or dhdt so that they balance
     k = 0
@@ -89,8 +98,11 @@ def write_input_file(RID, new_mask = False):
         smb_misfit = np.mean(smb.data[0][mask_in.data[0]==1]/900) - np.mean(dhdt_fit_field.data[0][mask_in.data[0]==1]) - k
         k += smb_misfit * learning_rate
 
-    smb.data[0] -= k * 900
-
+    if modify_dhdt_or_smb == 'smb':
+        smb.data[0] -= k * 900
+    else:
+        dhdt_fit_field.data[0] += k 
+    
     apparent_mb = smb.data[0] - dhdt_fit_field * 900
     #apparent_mb.data[0][mask_in.data[0] == 0] = 0
     # smooth input DEM
@@ -111,6 +123,7 @@ def write_input_file(RID, new_mask = False):
     topg = topg.squeeze()
     mask_in.name = 'mask'
     mask_in = mask_in.squeeze()
+    mask_in.astype('int')
     dhdt_fit_field.name = 'dhdt'
     dhdt_fit_field = dhdt_fit_field.squeeze()
     smb.name = 'climatic_mass_balance'
@@ -125,16 +138,12 @@ def write_input_file(RID, new_mask = False):
     thk.name = 'thk'
 
     all_xr = xr.merge([thk, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temperature])
+    if output_resolution is not None:
+        all_xr = all_xr.rio.reproject(all_xr.rio.crs, resolution = output_resolution, nodata = 3333)
     all_xr = all_xr.reindex(y=list(reversed(all_xr.y)))
     all_xr.to_netcdf(input_file)
     #create_input_nc(input_file, x, y, dem, topg, mask_in, dhdt_fit_field, smb, apparent_mb, ice_surface_temp=273) 
 
-
-glaciers_Sweden = get_RIDs_Sweden()
-RIDs_Sweden = glaciers_Sweden.RGIId
-
-#for RID in RIDs_Sweden:
-#    write_input_file(RID, new_mask = True)
 
 def partition_dhdt(output = 'all'):
     sum_arr = np.load('/home/thomas/regional_inversion/all_dhdt_dem.npy')
@@ -260,8 +269,8 @@ def correct_mask(RID):
     mask.rio.to_raster(path)
 
 
-#glaciers_Sweden = get_RIDs_Sweden()
-#RIDs_Sweden = glaciers_Sweden.RGIId
+glaciers_Sweden = get_RIDs_Sweden()
+RIDs_Sweden = glaciers_Sweden.RGIId
 
-#for RID in RIDs_Sweden:
-#    correct_mask(RID)
+for RID in RIDs_Sweden:
+    write_input_file(RID, new_mask = True)

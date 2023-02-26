@@ -14,9 +14,11 @@ from write_output import *
 #RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
 #RID = 'RGI60-08.00121' # Mikkajekna
+RID = 'RGI60-07.01475' # Droenbreen
+
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
-#RIDs_Sweden = [RID]
+RIDs_Sweden = [RID]
 for RID in RIDs_Sweden:
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
@@ -27,6 +29,7 @@ for RID in RIDs_Sweden:
 
     input_pism = rioxr.open_rasterio(input_file)
     input_pism = input_pism.rio.write_crs(dem.rio.crs)
+    input_pism.mask.data = input_pism.mask.astype('int').data
     input_igm = input_pism.rio.reproject(input_pism.rio.crs, resolution = (resolution,resolution), resampling = Resampling.bilinear)
     input_igm.ice_surface_temp.data = np.ones_like(input_igm.ice_surface_temp)*273
     input_igm = input_igm.squeeze()
@@ -53,8 +56,9 @@ for RID in RIDs_Sweden:
     pmax = 1500
     beta = 1
     theta = 0.02
-    bw = 0
+    bw = 1
     p_save = 10
+    p_mb = -500 #iterations before end when mass balance is recalculated
 
     # establish buffer
     mask_iter = mask == 1
@@ -66,6 +70,7 @@ for RID in RIDs_Sweden:
         boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
         mask_bw[boundary] = 1
     buffer = ((mask_bw + mask_iter*1)-1)
+    #buffer *= (a_smb<0)
 
     B_rec_all = []
     misfit_all = []
@@ -74,7 +79,7 @@ for RID in RIDs_Sweden:
     glacier.config.tend = dt
     glacier.config.tsave = dt * 10
     glacier.config.cfl = 0.3
-    glacier.config.init_slidingco = 6
+    glacier.config.init_slidingco = 0
     glacier.config.init_arrhenius = 78
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.append('velbase_mag')
@@ -120,7 +125,6 @@ for RID in RIDs_Sweden:
             new_bed = glacier.topg.numpy() - beta * misfit.numpy()
             new_bed[mask == 0] = B_init[mask == 0]
             bed_before_buffer = deepcopy(new_bed)
-            buffer *= (glacier.smb.numpy()<0)
             new_bed[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
             dummy_var.data = new_bed
             dummy_var = dummy_var.rio.interpolate_na()
@@ -129,7 +133,7 @@ for RID in RIDs_Sweden:
             left_sum[-1] += np.sum(np.maximum(new_bed - glacier.usurf, 0))
             new_bed = np.minimum(glacier.usurf, new_bed)
 
-            if p == (pmax - 500):
+            if p == (pmax - p_mb):
                 left_sum_mean = np.mean(left_sum[-100:])
                 #abl_area_size = len(np.nonzero(glacier.smb<0)[0])
                 abl_area_size = len(np.nonzero(np.logical_and(glacier.thk<10, mask == 1))[0])
@@ -155,3 +159,8 @@ for RID in RIDs_Sweden:
 
     glacier.print_all_comp_info()
     misfit_vs_iter = [np.mean(abs(x[mask == 1])) for x in misfit_all]
+
+radar_bed = rioxr.open_rasterio('/home/thomas/regional_inversion/Storglaciären_radar_bed.tif')
+radar_bed = radar_bed.rio.reproject_match(input_igm)
+radar_bed.data[radar_bed.data == radar_bed.attrs['_FillValue']] = np.nan
+radar_thk = S_ref - radar_bed.data[0]

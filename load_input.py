@@ -13,22 +13,27 @@ glacier_dir = '/home/thomas/regional_inversion/input_data/'
 
 
 def load_dhdt_path(RID, period):
-    path = glacier_dir + 'dhdt_{}/per_glacier/RGI60-08/RGI60-08.0'.format(period) + RID[10] + '/'+RID+ '/dem.tif'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    path = glacier_dir + 'dhdt_{}/per_glacier/RGI60-'.format(period) + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+RID+ '/dem.tif'
     dhdt = rioxr.open_rasterio(path)
 
     return dhdt
 
 
 def load_dem_path(RID):
-    path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/dem.tif'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    path = glacier_dir + 'DEMs/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0'  + RID[10] + '/'+RID + '/dem.tif'
     dem = rioxr.open_rasterio(path)
 
     return dem
 
 
 def load_mask_path(RID, mask_new = False):
-    path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
-    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data_new.nc'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0'  + RID[10] + '/'+RID + '/dem.tif'
+    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+RID + '/gridded_data_new.nc'
+    if not os.path.isfile(path):
+        path = glacier_dir + 'DEMs/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0'  + RID[10] + '/'+RID + '/gridded_data.nc'
     with utils.ncDataset(path) as nc:
         if mask_new is True:
             mask = nc.variables['mask_new'][:]
@@ -50,8 +55,14 @@ def load_georeferenced_mask(RID):
 
 
 def load_thk_path(RID):
-    path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
-    path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0'  + RID[10] + '/'+RID + '/dem.tif'
+    path = glacier_dir + 'dhdt_2000-2020/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+RID + '/gridded_data_new.nc'
+    if not os.path.isfile(path):
+        path = glacier_dir + 'DEMs/per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0'  + RID[10] + '/'+RID + '/gridded_data.nc'
+    
+    #path_tif = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID+ '/dem.tif'
+    #path = glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+RID + '/gridded_data.nc'
     with utils.ncDataset(path) as nc:
         thk = nc.variables['consensus_ice_thickness'][:]
     tif = rioxr.open_rasterio(path_tif)
