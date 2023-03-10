@@ -7,24 +7,31 @@ from load_input import *
 import datetime
 import time
 
-def nc_out(RID, field, i=-1, file = 'output.nc'):
+def nc_out(RID, field, i=-1, file = 'output.nc', file_not_standard_dims = False, flip = False):
     dem = load_dem_path(RID)
     dem = crop_border_xarr(dem)
-    nc = get_nc_data('/home/thomas/regional_inversion/output/' + RID + '/' + file, field, i)
-    dem.data[0] = nc
+    if file_not_standard_dims is True:
+        nc = rioxr.open_rasterio('/home/thomas/regional_inversion/output/' + RID + '/' + file)[field][i]
+        if flip is True:
+            nc.data = np.flip(nc.data, axis = 0)
+        nc = nc.rio.write_crs(dem.rio.crs)
+        return nc
+    else:
+        nc = get_nc_data('/home/thomas/regional_inversion/output/' + RID + '/' + file, field, i)
+        dem.data[0] = nc
 
-    return dem
+        return dem
 
 
-def out_to_tif(RID, field, i=-1, file = 'output.nc', threshold = np.nan):
-    out = nc_out(RID, field, i, file = file)
+def out_to_tif(RID, field, i=-1, file = 'output.nc', threshold = np.nan, file_not_standard_dims = False, flip = False):
+    out = nc_out(RID, field, i, file = file, file_not_standard_dims = file_not_standard_dims, flip = flip)
     path = '/home/thomas/regional_inversion/output/' + RID + '/' + field + '.tif'
     if not np.isnan(threshold):
         out.data[0][out.data[0]<threshold] = out.attrs['_FillValue']
     out.rio.to_raster(path)
 
 
-def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970', threshold=np.nan):
+def all_out_to_Win(field, i = ':', file = 'output.nc', date = '01/01/01/1970', threshold=np.nan, file_not_standard_dims = False, flip = False):
     ''' date should be given as "hh/dd/mm/yyyy'''
     glaciers_Sweden = get_RIDs_Sweden()
     RIDs_Sweden = glaciers_Sweden.RGIId
@@ -35,7 +42,7 @@ def all_out_to_Win(field, file = 'output.nc', date = '01/01/01/1970', threshold=
             date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
             file_time = os.path.getmtime(path)
             if file_time > date_unix:
-                out_to_tif(RID, field, file = file, i = ':', threshold = threshold)
+                out_to_tif(RID, field, file = file, i = i, threshold = threshold, file_not_standard_dims = file_not_standard_dims, flip = flip)
                 shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/'+ field + '.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_' + field + '.tif')
         except FileNotFoundError:
             print('field {} does not exist for glacier {}'.format(field, RID))
