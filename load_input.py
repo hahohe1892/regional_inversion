@@ -47,6 +47,12 @@ def load_mask_path(RID, mask_new = False):
     return tif
 
 
+def load_consensus_thk(RID):
+    RGI_region = RID.split('-')[1].split('.')[0]
+    path = glacier_dir + 'consensus_thk/RGI60-' + RGI_region + '/' + RID + '_thickness.tif'
+    return rioxr.open_rasterio(path)
+
+    
 def load_georeferenced_mask(RID):
     path = glacier_dir + 'outlines/georeferenced_masks/mask_{}_new.tif'.format(RID)
     mask = rioxr.open_rasterio(path)

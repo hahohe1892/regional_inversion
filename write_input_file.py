@@ -12,7 +12,7 @@ from copy import deepcopy
 def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolution = None, fit_dhdt_regionally = True, modify_dhdt_or_smb = 'smb'):
 
     # default DEM (COPDEM) is from 2010 - 2015
-    
+
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     input_dir = '/home/thomas/regional_inversion/input_data/'
@@ -31,6 +31,8 @@ def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolut
         mask_in = load_georeferenced_mask(RID)
         # decide buffer around glacier; here based on centering mask and taking this as standard extent
         mask_in = crop_to_new_mask(mask_in, mask_in, 10)
+        mask_in = mask_in.rio.reproject(mask_in.rio.crs, resolution = 100)
+        mask_in.data[mask_in.data == mask_in._FillValue] = 0
         dem = dem.rio.reproject_match(mask_in)
     else:
         mask_in = load_mask_path(RID)
@@ -46,15 +48,19 @@ def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolut
     dhdt = load_dhdt_path(RID, period = period)
 
 
-    thk_oggm_in = load_thk_path(RID)
-    thk_oggm_in = thk_oggm_in.rio.reproject_match(dem)
-    thk_oggm_in = thk_oggm_in.fillna(0)
-    thk_oggm = np.zeros_like(dem.data[0])
-    thk_oggm = thk_oggm_in
+    #thk_oggm_in = load_thk_path(RID)
+    thk_oggm = load_consensus_thk(RID)
+    thk_oggm = thk_oggm.rio.reproject_match(dem)
+    thk_oggm.data[thk_oggm.data < 0] = 0
+    thk_oggm.data[thk_oggm.data > 1e5] = 0
+    thk_oggm.data[thk_oggm.data == thk_oggm._FillValue] = 0
+    #thk_oggm = np.zeros_like(dem.data[0])
+    #thk_oggm = thk_oggm_in
     thk_oggm.data[0][mask_in.data[0] == 0] = 0
 
 
-    dhdt = crop_to_xarr(dhdt, dem)
+    #dhdt = crop_to_xarr(dhdt, dem)
+    dhdt = dhdt.rio.reproject_match(dem)
 
     smb = deepcopy(dem)#np.ones_like(dem[0])
     smb.data[0] = np.ones_like(dem[0])
@@ -272,5 +278,5 @@ def correct_mask(RID):
 glaciers_Sweden = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
 
-for RID in RIDs_Sweden:
-    write_input_file(RID, new_mask = True)
+#for RID in RIDs_Sweden:
+#    write_input_file(RID, new_mask = True, period = '2000-2020')
