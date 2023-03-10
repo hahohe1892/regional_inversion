@@ -8,7 +8,44 @@ from oggm.core import massbalance
 import statsmodels.api as sm
 import xarray as xr
 from copy import deepcopy
+import rioxarray as rioxr
 
+
+def write_input_file_Sweden_Norway(RID, period = '2000-2020'):
+    
+    input_dir = '/home/thomas/regional_inversion/input_data/'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+
+    dem_Norway = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Norway', per_glacier_dir, 'dem.tif'))
+    dem_Sweden = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Sweden', per_glacier_dir, 'dem.tif'))
+    # choose the DEM which contains no nans
+    if (dem_Sweden.data == dem_Sweden._FillValue).any():
+        if not (dem_Norway.data == dem_Norway._FillValue).any():
+            print('Choosing Norwegian DEM')
+            dem = deepcopy(dem_Norway)
+    elif (dem_Norway.data == dem_Norway._FillValue).any():
+        if not (dem_Sweden.data == dem_Sweden._FillValue).any():
+            dem = deepcopy(dem_Sweden)
+            print('Choosing Swedish DEM')
+    elif (dem_Norway.data == dem_Norway._FillValue).any() and (dem_Norway.data == dem_Norway._FillValue).any():
+        raise ValueError('No suitable DEM found, cannot proceed')
+
+    dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif'))
+
+    if RID in RIDs_Sweden.tolist():
+        mask = load_georeferenced_mask(RID)
+    else:
+        mask = rioxr.open_rasterio(os.path.join(input_dir, 'masks', per_glacier_dir, RID + '_mask.tif'))
+
+    consensus_thk = rioxr.open_rasterio(os.path.join(input_dir, 'consensus_thk', 'RGI60-' + RGI_region, RID + '_thickness.tif'))
+    vel_Millan = rioxr.open_rasterio(os.path.join(input_dir, 'vel_Millan', per_glacier_dir, 'dem.tif'))
+    # mass balance; VERY PRELIMINARY
+    
+
+    
 def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolution = None, fit_dhdt_regionally = True, modify_dhdt_or_smb = 'smb'):
 
     # default DEM (COPDEM) is from 2010 - 2015
