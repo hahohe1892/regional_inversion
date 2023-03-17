@@ -11,8 +11,8 @@ from copy import deepcopy
 import rioxarray as rioxr
 
 
-def write_input_file_Sweden_Norway(RID, period = '2000-2020'):
-    
+def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True):
+
     input_dir = '/home/thomas/regional_inversion/input_data/'
     RGI_region = RID.split('-')[1].split('.')[0]
     per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
@@ -37,15 +37,23 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020'):
 
     if RID in RIDs_Sweden.tolist():
         mask = load_georeferenced_mask(RID)
+        mask = mask.rio.reproject_match(dem)
     else:
         mask = rioxr.open_rasterio(os.path.join(input_dir, 'masks', per_glacier_dir, RID + '_mask.tif'))
 
     consensus_thk = rioxr.open_rasterio(os.path.join(input_dir, 'consensus_thk', 'RGI60-' + RGI_region, RID + '_thickness.tif'))
     vel_Millan = rioxr.open_rasterio(os.path.join(input_dir, 'vel_Millan', per_glacier_dir, 'dem.tif'))
-    # mass balance; VERY PRELIMINARY
     
+    mb_gradient = get_mb_Rounce(RID, last_n_years = 20, standardize = standardize)
+    if standardize is True:
+        heights = (dem.data[0][mask.data[0] == 1]-np.min(dem.data[0][mask.data[0] == 1]))/(np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1]))
+    else:
+        heights = dem.data[0][mask.data[0] == 1]
+    mb_interp = mb_gradient.interp(y = heights)#, kwargs={"fill_value": "extrapolate"})
+    mb = np.zeros_like(dem.data[0])
+    mb[mask.data[0] == 1] = mb_interp
 
-    
+
 def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolution = None, fit_dhdt_regionally = True, modify_dhdt_or_smb = 'smb'):
 
     # default DEM (COPDEM) is from 2010 - 2015
