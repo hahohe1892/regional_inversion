@@ -242,6 +242,23 @@ def print_all():
         gdir = load_dem_gdir(RID)
         print(gdir[0].form)
 
+
+def get_mb_Rounce(RID, last_n_years = 20, standardize = False):
+    RID_id = RID.split('-')[1]
+    if RID_id[0] == '0':
+        RID_id = RID_id[1:]
+    mb_xr = rioxr.open_rasterio(os.path.join(glacier_dir, 'mass_balance', RID_id + '_ERA5_MCMC_ba1_50sets_1979_2019_binned.nc'))
+    elevation_bins = np.flip(mb_xr[0].bin_surface_h_initial[0][0])
+    mass_balance = mb_xr[1].bin_massbalclim_annual
+    mass_balance_last_n_years = mass_balance[0][:,-last_n_years:]
+    mass_balance_mean = mass_balance_last_n_years.mean(axis = 1)
+    if standardize is True:
+        mass_balance_mean = mass_balance_mean.assign_coords(y = (elevation_bins.data-np.min(elevation_bins.data))/(np.max(elevation_bins.data) - np.min(elevation_bins.data)))
+    else:
+        mass_balance_mean = mass_balance_mean.assign_coords(y = elevation_bins.data)
+    return mass_balance_mean
+
+
 '''
 RIDs = get_RIDs_Sweden()
 RIDs_Sweden = glaciers_Sweden.RGIId
