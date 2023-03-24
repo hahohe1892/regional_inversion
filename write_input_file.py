@@ -1,6 +1,6 @@
 import numpy as np
 from load_input import *
-import PISM
+#import PISM
 from bed_inversion import *
 import os
 import shutil
@@ -9,11 +9,17 @@ import statsmodels.api as sm
 import xarray as xr
 from copy import deepcopy
 import rioxarray as rioxr
+import scipy
 
 
-def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True):
+def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True, modify_dhdt_or_smb = 'smb', bin_heights = True):
 
+    Fill_Value = 9999.0
     input_dir = '/home/thomas/regional_inversion/input_data/'
+    output_dir = '/home/thomas/regional_inversion/output/' + RID
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    input_file = output_dir + '/input.nc'
     RGI_region = RID.split('-')[1].split('.')[0]
     per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
     glaciers_Sweden = get_RIDs_Sweden()
@@ -33,25 +39,48 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True
     elif (dem_Norway.data == dem_Norway._FillValue).any() and (dem_Norway.data == dem_Norway._FillValue).any():
         raise ValueError('No suitable DEM found, cannot proceed')
 
-    dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif'))
+    dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif')) * 0.85 #convert from m/yr to m.w.eq.
+    dem = dem.rio.reproject_match(dhdt)
 
     if RID in RIDs_Sweden.tolist():
         mask = load_georeferenced_mask(RID)
-        mask = mask.rio.reproject_match(dem)
+        mask = mask.rio.reproject_match(dhdt)
     else:
         mask = rioxr.open_rasterio(os.path.join(input_dir, 'masks', per_glacier_dir, RID + '_mask.tif'))
-
+        mask = mask.rio.set_attrs({'nodata': 0})
+        mask = mask.rio.reproject_match(dhdt)
     consensus_thk = rioxr.open_rasterio(os.path.join(input_dir, 'consensus_thk', 'RGI60-' + RGI_region, RID + '_thickness.tif'))
+    consensus_thk = consensus_thk.rio.set_attrs({'nodata': Fill_Value})
+    consensus_thk = consensus_thk.rio.reproject_match(dhdt)
+    consensus_thk.data[0][consensus_thk.data[0] == Fill_Value] = 0
+    consensus_thk.data[0][mask.data[0] == 0] = 0
     vel_Millan = rioxr.open_rasterio(os.path.join(input_dir, 'vel_Millan', per_glacier_dir, 'dem.tif'))
-    
-    mb_gradient = get_mb_Rounce(RID, last_n_years = 20, standardize = standardize)
-    if standardize is True:
-        heights = (dem.data[0][mask.data[0] == 1]-np.min(dem.data[0][mask.data[0] == 1]))/(np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1]))
-    else:
-        heights = dem.data[0][mask.data[0] == 1]
-    mb_interp = mb_gradient.interp(y = heights)#, kwargs={"fill_value": "extrapolate"})
-    mb = np.zeros_like(dem.data[0])
-    mb[mask.data[0] == 1] = mb_interp
+
+    mb, dhdt = get_mb_dhdt(RID, dem, mask, last_n_years = 20, standardize = standardize, bin_heights = bin_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
+
+    apparent_mb = (mb - dhdt)*mask
+
+    dem.name = 'usurf'
+    dem = dem.squeeze()
+    mask.name = 'mask'
+    mask = mask.squeeze()
+    mask.astype('int')
+    dhdt_fit_field.name = 'dhdt'
+    dhdt_fit_field = dhdt_fit_field.squeeze()
+    mb.name = 'climatic_mass_balance'
+    mb.attrs['units'] = 'm w eq.'
+    mb = mb.squeeze()
+    apparent_mb.name = 'apparent_mass_balance'
+    apparent_mb = apparent_mb.squeeze()
+    consensus_thk = consensus_thk.squeeze()
+    consensus_thk.name = 'thk'
+    topg = dem - consensus_thk
+    topg.name = 'topg'
+    vel_Millan.name = 'velocity by Millan'
+    vel_Millan = vel_Millan.squeeze()
+
+    all_xr = xr.merge([consensus_thk, dem, topg, mask, dhdt, mb, apparent_mb, vel_Millan])
+    all_xr.to_netcdf(input_file)
 
 
 def write_input_file(RID, period = '2010-2015', new_mask = False, output_resolution = None, fit_dhdt_regionally = True, modify_dhdt_or_smb = 'smb'):
