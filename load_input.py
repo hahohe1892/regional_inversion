@@ -6,7 +6,7 @@ import geopandas as gpd
 from netCDF4 import Dataset as NC
 import pandas as pd
 from funcs import *
-from rasterio import merge
+from rioxarray import merge
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -248,15 +248,15 @@ def get_mb_Rounce(RID, last_n_years = 20, standardize = False):
     RID_id = RID.split('-')[1]
     if RID_id[0] == '0':
         RID_id = RID_id[1:]
-    mb_xr = rioxr.open_rasterio(os.path.join(glacier_dir, 'mass_balance', RID_id + '_ERA5_MCMC_ba1_50sets_1979_2019_binned.nc'))
-    elevation_bins = np.flip(mb_xr[0].bin_surface_h_initial[0][0])
-    mass_balance = mb_xr[1].bin_massbalclim_annual
-    mass_balance_last_n_years = mass_balance[0][:,-last_n_years:]
-    mass_balance_mean = mass_balance_last_n_years.mean(axis = 1)
+    mb_xr = xr.open_dataset(os.path.join(glacier_dir, 'mass_balance', RID_id + '_ERA5_MCMC_ba1_50sets_1979_2019_binned.nc'))
+    elevation_bins = mb_xr.bin_surface_h_initial.squeeze()
+    mass_balance = mb_xr.bin_massbalclim_annual
+    mass_balance = mass_balance.where(mass_balance.year >= 2000, drop = True)
+    mass_balance_mean = mass_balance.mean(axis = 2).squeeze()
     if standardize is True:
-        mass_balance_mean = mass_balance_mean.assign_coords(y = (elevation_bins.data-np.min(elevation_bins.data))/(np.max(elevation_bins.data) - np.min(elevation_bins.data)))
+        mass_balance_mean = mass_balance_mean.assign_coords({'bin':  (elevation_bins.data-np.min(elevation_bins.data))/(np.max(elevation_bins.data) - np.min(elevation_bins.data))})
     else:
-        mass_balance_mean = mass_balance_mean.assign_coords(y = elevation_bins.data)
+        mass_balance_mean = mass_balance_mean.assign_coords({'bin': elevation_bins.data})
     return mass_balance_mean
 
 
@@ -276,14 +276,18 @@ def nearby_glacier(RID, RGI, buffer_width):
         return intersection_RIDs
     area_RIDs = neighboring_glacier(RID, RGI, buffer_width).to_list()
     old_len = 0
-    while len(area_RIDs) > old_len:
-        old_len = len(area_RIDs)
+    checked_RIDs = []
+    new_RIDs = deepcopy(area_RIDs)
+    while len(new_RIDs) > 0:
+        old_len = len(new_RIDs)
         print(old_len)
         new_area_RIDs = []
-        for area_RID in area_RIDs:
+        for area_RID in new_RIDs:
             new_area_RIDs.extend(neighboring_glacier(area_RID, RGI, 200))
-        area_RIDs.extend(new_area_RIDs)
-        area_RIDs = np.unique(area_RIDs).tolist()
+            checked_RIDs.append(area_RID)
+        new_RIDs = [x for x in new_area_RIDs if x not in checked_RIDs]
+        new_RIDs = np.unique(new_RIDs).tolist()
+        area_RIDs.extend(new_RIDs)
 
     return area_RIDs
 
@@ -303,8 +307,8 @@ def obtain_area_mosaic(RID):
     input_igm = input_igm.fillna(Fill_Value)
     fr = utils.get_rgi_region_file(RGI_region, version='62')
     gdf = gpd.read_file(fr)
-    gdf_crs = gdf.to_crs(input_igm.rio.crs)
-    area_RIDs = nearby_glacier(RID, gdf_crs, 200)
+    gdf = gdf.to_crs(gdf.crs.from_epsg('32632'))
+    area_RIDs = nearby_glacier(RID, gdf, 200)
     mosaic_list = [input_igm]
     for glacier in area_RIDs[1:]:
         glacier_dir = '/home/thomas/regional_inversion/output/' + glacier
@@ -318,6 +322,100 @@ def obtain_area_mosaic(RID):
         input = input.fillna(Fill_Value)
         input = input.rio.reproject(input_igm.rio.crs)
         mosaic_list.append(input)
-    mosaic = rioxr.merge.merge_datasets(mosaic_list)#, nodata = 9999.0)#, method = 'max')
+    mosaic = merge.merge_datasets(mosaic_list)#, nodata = 9999.0)#, method = 'max')
     mosaic = mosaic.where(mosaic != Fill_Value)
     return mosaic
+
+
+def get_mb_dhdt(RID, dem, mask, last_n_years = 20, standardize = True,bin_heights = False, modify_dhdt_or_smb = 'smb'):
+    mb_gradient = get_mb_Rounce(RID, last_n_years = 20, standardize = standardize)
+    if standardize is True:
+        heights = (dem.data[0][mask.data[0] == 1]-np.min(dem.data[0][mask.data[0] == 1]))/(np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1]))
+    else:
+        heights = dem.data[0][mask.data[0] == 1]
+    mb_interp = mb_gradient.interp(bin=heights)#, kwargs={"fill_value": "extrapolate"})
+    mb = dem*mask
+    mb.data[0][mask.data[0] == 1] = mb_interp
+
+    def least_squares_dhdt(heights, a, b, c, gamma):
+        y = (heights + a)**gamma + b*(heights + a) + c
+        return y
+
+    glacier_area = len(mask.data[0] == 1) * 100 * 100 / 1e6
+
+    if glacier_area < 5:
+        p0 = [-0.3, 0.6, 0.09, 2.0]
+        bounds = []
+    elif glacier_area > 20:
+        p0 = [-0.02, 0.12, 0, 6.0]
+        bounds = []
+    else:
+        p0 = [-0.05, 0.19, 0.01, 4.0]
+        bounds = []
+
+    glacier_elevation_range = np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1])
+    # remove the lowest x m as dh/dt may be to high because of too-large mask
+    cutoff_elevation = 100
+    if standardize is True:
+        cutoff_percent = cutoff_elevation/glacier_elevation_range
+    else:
+        cutoff_percent = cutoff_elevation
+    if glacier_elevation_range > 300:
+        bins = np.linspace(np.min(heights), np.max(heights), 10)
+        bin_inds = np.digitize(heights, bins)
+        heights_binned = np.array([heights[bin_inds == i].mean() for i in range(1, len(bins))])
+        dhdt_binned = [dhdt.data[0][mask.data[0] == 1][bin_inds == i].mean() for i in range(1, len(bins))]
+        # try to fit. Since params can't always be found, try the following order:
+        # 1) with cutoff height
+        # 2) without cutoff height
+        # 3) with cutoff height and not the choice of bin_heights
+        # 4) without cutoff height and not the choice of bin_heights
+        if bin_heights is True:
+            fitting_input = [heights_binned, dhdt_binned]
+        else:
+            fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
+        try:
+            print('trying to fit with preferred options...')
+            params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0])[fitting_input[0] > cutoff_percent], ydata = np.array(fitting_input[1])[fitting_input[0] > cutoff_percent])[0]#, p0 = p0, bounds = bounds)[0]
+        except(RuntimeError):
+            print('option 1 for fitting failed, trying option 2...')
+            try:
+                params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0]), ydata = np.array(fitting_input[1]))[0]
+            except(RuntimeError):
+                print('option 2 for fitting failed, trying option 3...')
+                try:
+                    if bin_heights is True:
+                        fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
+                    else:
+                        fitting_input = [heights_binned, dhdt_binned]
+                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0])[fitting_input[0] > cutoff_percent], ydata = np.array(fitting_input[1])[fitting_input[0] > cutoff_percent])[0]
+                except(RuntimeError):
+                    print('option 3 for fitting failed, trying option 4...')
+                    if bin_heights is True:
+                        fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
+                    else:
+                        fitting_input = [heights_binned, dhdt_binned]
+                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0]), ydata = np.array(fitting_input[1]))[0]
+        print('...fitting successfull')
+        dhdt_fit = least_squares_dhdt(heights, params[0], params[1], params[2], params[3])
+        dhdt_fit[np.isnan(dhdt_fit)] = np.nanmin(dhdt_fit)
+        dhdt_fit_field = dem*mask
+        dhdt_fit_field.data[0][mask.data[0] == 1] = dhdt_fit
+    else:
+        dhdt_fit_field = dem*mask
+        dhdt_fit_field.data[0][mask.data[0] == 1] = dhdt.mean().data
+
+    # modify either smb or dhdt so that they balance
+    k = 0
+    learning_rate = 0.2
+    mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt_fit_field.data[0][mask.data[0]==1])
+    while abs(mb_misfit) > 0.01:
+        mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt_fit_field.data[0][mask.data[0]==1]) - k 
+        k += mb_misfit * learning_rate
+
+    if modify_dhdt_or_smb == 'smb':
+        mb -= k * mask
+    else:
+        dhdt_fit_field += k
+
+    return mb, dhdt_fit_field
