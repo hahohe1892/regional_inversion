@@ -6,6 +6,7 @@ import geopandas as gpd
 from netCDF4 import Dataset as NC
 import pandas as pd
 from funcs import *
+from rasterio import merge
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -259,16 +260,64 @@ def get_mb_Rounce(RID, last_n_years = 20, standardize = False):
     return mass_balance_mean
 
 
-'''
-RIDs = get_RIDs_Sweden()
-RIDs_Sweden = glaciers_Sweden.RGIId
-RID = RIDs_Sweden.loc[-1]
-RID = 'RGI60-08.00213' # Storglaciären
-m_o = load_mask_path(RID)
-m_o = crop_border_xarr(m_o)
-dem = load_dem_path(RID)
-dem = crop_border_xarr(dem)
-m_n = load_georeferenced_mask(RID)
-m_n = crop_to_xarr(m_n, dem)
-pl(m_o.data[0] - m_n.data[0])
-'''
+def nearby_glacier(RID, RGI, buffer_width):
+    '''
+    supply a geodataframe with RGI outlines such as obtained from:
+    fr = utils.get_rgi_region_file(RGI_region, version='62')
+    gdf = gpd.read_file(fr)
+    gdf_crs = gdf.to_crs(some_crs)
+    '''
+
+    def neighboring_glacier(RID, RGI, buffer_width):
+        glacier_buffer = RGI[RGI.RGIId == RID].buffer(buffer_width)
+        intersection = RGI.intersection(glacier_buffer.iloc[0])
+        intersection_indices = np.nonzero(~intersection.is_empty.to_numpy())
+        intersection_RIDs = RGI.iloc[intersection_indices].RGIId
+        return intersection_RIDs
+    area_RIDs = neighboring_glacier(RID, RGI, buffer_width).to_list()
+    old_len = 0
+    while len(area_RIDs) > old_len:
+        old_len = len(area_RIDs)
+        print(old_len)
+        new_area_RIDs = []
+        for area_RID in area_RIDs:
+            new_area_RIDs.extend(neighboring_glacier(area_RID, RGI, 200))
+        area_RIDs.extend(new_area_RIDs)
+        area_RIDs = np.unique(area_RIDs).tolist()
+
+    return area_RIDs
+
+
+def obtain_area_mosaic(RID):
+    working_dir = '/home/thomas/regional_inversion/output/' + RID
+    input_file = working_dir + '/input.nc'
+    Fill_Value = 9999.0
+
+    RGI_region = RID.split('-')[1].split('.')[0]
+    input_igm = rioxr.open_rasterio(input_file)
+    input_igm = input_igm.squeeze()
+    input_igm = input_igm.where(input_igm.mask != 0)
+    input_igm.attrs['_FillValue'] = Fill_Value
+    for var in input_igm.data_vars:
+        input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
+    input_igm = input_igm.fillna(Fill_Value)
+    fr = utils.get_rgi_region_file(RGI_region, version='62')
+    gdf = gpd.read_file(fr)
+    gdf_crs = gdf.to_crs(input_igm.rio.crs)
+    area_RIDs = nearby_glacier(RID, gdf_crs, 200)
+    mosaic_list = [input_igm]
+    for glacier in area_RIDs[1:]:
+        glacier_dir = '/home/thomas/regional_inversion/output/' + glacier
+        input_file = glacier_dir + '/input.nc'
+        input = rioxr.open_rasterio(input_file)
+        input = input.squeeze()
+        input.attrs['_FillValue'] = Fill_Value
+        input = input.where(input.mask != 0)
+        for var in input.data_vars:
+            input.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
+        input = input.fillna(Fill_Value)
+        input = input.rio.reproject(input_igm.rio.crs)
+        mosaic_list.append(input)
+    mosaic = rioxr.merge.merge_datasets(mosaic_list)#, nodata = 9999.0)#, method = 'max')
+    mosaic = mosaic.where(mosaic != Fill_Value)
+    return mosaic
