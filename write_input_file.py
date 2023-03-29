@@ -11,10 +11,12 @@ from copy import deepcopy
 import rioxarray as rioxr
 import scipy
 
-
-def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True, modify_dhdt_or_smb = 'smb', bin_heights = True):
+#RID = 'RGI60-08.01657'
+def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_heights = True, modify_dhdt_or_smb = 'smb'):
 
     Fill_Value = 9999.0
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
     input_dir = '/home/thomas/regional_inversion/input_data/'
     output_dir = '/home/thomas/regional_inversion/output/' + RID
     if not os.path.exists(output_dir):
@@ -22,21 +24,16 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True
     input_file = output_dir + '/input.nc'
     RGI_region = RID.split('-')[1].split('.')[0]
     per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
-    glaciers_Sweden = get_RIDs_Sweden()
-    RIDs_Sweden = glaciers_Sweden.RGIId
-
     dem_Norway = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Norway', per_glacier_dir, 'dem.tif'))
     dem_Sweden = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Sweden', per_glacier_dir, 'dem.tif'))
     # choose the DEM which contains no nans
-    if (dem_Sweden.data == dem_Sweden._FillValue).any():
-        if not (dem_Norway.data == dem_Norway._FillValue).any():
-            print('Choosing Norwegian DEM')
-            dem = deepcopy(dem_Norway)
-    elif (dem_Norway.data == dem_Norway._FillValue).any():
-        if not (dem_Sweden.data == dem_Sweden._FillValue).any():
+    if not (dem_Sweden.data == dem_Sweden._FillValue).any():
             dem = deepcopy(dem_Sweden)
             print('Choosing Swedish DEM')
-    elif (dem_Norway.data == dem_Norway._FillValue).any() and (dem_Norway.data == dem_Norway._FillValue).any():
+    elif not (dem_Norway.data == dem_Norway._FillValue).any():
+            print('Choosing Norwegian DEM')
+            dem = deepcopy(dem_Norway)
+    elif (dem_Norway.data == dem_Norway._FillValue).any() and (dem_Sweden.data == dem_Sweden._FillValue).any():
         raise ValueError('No suitable DEM found, cannot proceed')
 
     dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif')) * 0.85 #convert from m/yr to m.w.eq.
@@ -44,6 +41,7 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True
 
     if RID in RIDs_Sweden.tolist():
         mask = load_georeferenced_mask(RID)
+        mask = mask.rio.set_attrs({'nodata': 0})
         mask = mask.rio.reproject_match(dhdt)
     else:
         mask = rioxr.open_rasterio(os.path.join(input_dir, 'masks', per_glacier_dir, RID + '_mask.tif'))
@@ -56,7 +54,7 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True
     consensus_thk.data[0][mask.data[0] == 0] = 0
     vel_Millan = rioxr.open_rasterio(os.path.join(input_dir, 'vel_Millan', per_glacier_dir, 'dem.tif'))
 
-    mb, dhdt = get_mb_dhdt(RID, dem, mask, last_n_years = 20, standardize = standardize, bin_heights = bin_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
+    mb, dhdt = resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights = use_generic_dem_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
 
     apparent_mb = (mb - dhdt)*mask
 
@@ -65,8 +63,8 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', standardize = True
     mask.name = 'mask'
     mask = mask.squeeze()
     mask.astype('int')
-    dhdt_fit_field.name = 'dhdt'
-    dhdt_fit_field = dhdt_fit_field.squeeze()
+    dhdt.name = 'dhdt'
+    dhdt = dhdt.squeeze()
     mb.name = 'climatic_mass_balance'
     mb.attrs['units'] = 'm w eq.'
     mb = mb.squeeze()
