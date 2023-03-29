@@ -7,6 +7,8 @@ from netCDF4 import Dataset as NC
 import pandas as pd
 from funcs import *
 from rioxarray import merge
+import xarray as xr
+import scipy
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -222,13 +224,13 @@ def create_input_nc(file, x, y, dem, topg, mask, dhdt, smb, apparent_mb, ice_sur
     create_nc(vars, file)
 
 
-def get_RIDs_Sweden(file = glacier_dir + 'Glaciers_Sweden.txt'):
-    return pd.read_table(file, delimiter = ';')
+def get_RIDs_Sweden(file=glacier_dir + 'Glaciers_Sweden.txt'):
+    return pd.read_table(file, delimiter=';')
 
 
 def get_gdir_info(RID):
     cfg.initialize(logging_level='WARNING')
-    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/DEMs'    
+    cfg.PATHS['working_dir'] = '~/regional_inversion/input_data/DEMs'
     return GlacierDirectory(glacier_dir + 'DEMs/per_glacier/RGI60-08/RGI60-08.0' + RID[10] + '/'+ RID)
 
 
@@ -242,22 +244,6 @@ def print_all():
     for RID in RIDs_Sweden:
         gdir = load_dem_gdir(RID)
         print(gdir[0].form)
-
-
-def get_mb_Rounce(RID, last_n_years = 20, standardize = False):
-    RID_id = RID.split('-')[1]
-    if RID_id[0] == '0':
-        RID_id = RID_id[1:]
-    mb_xr = xr.open_dataset(os.path.join(glacier_dir, 'mass_balance', RID_id + '_ERA5_MCMC_ba1_50sets_1979_2019_binned.nc'))
-    elevation_bins = mb_xr.bin_surface_h_initial.squeeze()
-    mass_balance = mb_xr.bin_massbalclim_annual
-    mass_balance = mass_balance.where(mass_balance.year >= 2000, drop = True)
-    mass_balance_mean = mass_balance.mean(axis = 2).squeeze()
-    if standardize is True:
-        mass_balance_mean = mass_balance_mean.assign_coords({'bin':  (elevation_bins.data-np.min(elevation_bins.data))/(np.max(elevation_bins.data) - np.min(elevation_bins.data))})
-    else:
-        mass_balance_mean = mass_balance_mean.assign_coords({'bin': elevation_bins.data})
-    return mass_balance_mean
 
 
 def nearby_glacier(RID, RGI, buffer_width):
@@ -327,95 +313,201 @@ def obtain_area_mosaic(RID):
     return mosaic
 
 
-def get_mb_dhdt(RID, dem, mask, last_n_years = 20, standardize = True,bin_heights = False, modify_dhdt_or_smb = 'smb'):
-    mb_gradient = get_mb_Rounce(RID, last_n_years = 20, standardize = standardize)
-    if standardize is True:
+def get_mb_gradient_Rounce(RID, use_generic_dem_heights=True):
+    RID_id = RID.split('-')[1]
+    if RID_id[0] == '0':
+        RID_id = RID_id[1:]
+    mb_xr = xr.open_dataset(os.path.join(glacier_dir, 'mass_balance', RID_id + '_ERA5_MCMC_ba1_50sets_1979_2019_binned.nc'))
+    elevation_bins = mb_xr.bin_surface_h_initial.squeeze()
+    mass_balance = mb_xr.bin_massbalclim_annual
+    mass_balance = mass_balance.where(mass_balance.year >= 2000, drop=True)
+    mass_balance_mean = mass_balance.mean(axis = 2).squeeze()
+    if use_generic_dem_heights is True:
+        mass_balance_mean = mass_balance_mean.assign_coords({'bin':  (elevation_bins.data-np.min(elevation_bins.data))/(np.max(elevation_bins.data) - np.min(elevation_bins.data))})
+    else:
+        mass_balance_mean = mass_balance_mean.assign_coords({'bin': elevation_bins.data})
+    return mass_balance_mean
+
+
+def get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=True):
+    mb_gradient = get_mb_gradient_Rounce(RID, use_generic_dem_heights=use_generic_dem_heights)
+    if use_generic_dem_heights is True:
         heights = (dem.data[0][mask.data[0] == 1]-np.min(dem.data[0][mask.data[0] == 1]))/(np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1]))
     else:
         heights = dem.data[0][mask.data[0] == 1]
+
     mb_interp = mb_gradient.interp(bin=heights)#, kwargs={"fill_value": "extrapolate"})
     mb = dem*mask
     mb.data[0][mask.data[0] == 1] = mb_interp
+    return mb, heights
 
-    def least_squares_dhdt(heights, a, b, c, gamma):
-        y = (heights + a)**gamma + b*(heights + a) + c
-        return y
 
-    glacier_area = len(mask.data[0] == 1) * 100 * 100 / 1e6
+def resolve_mb_dhdt(RID, dhdt, dem, mask, use_generic_dem_heights=True, bin_heights=False, modify_dhdt_or_smb='smb', cutoff_elevation=None):
 
-    if glacier_area < 5:
-        p0 = [-0.3, 0.6, 0.09, 2.0]
-        bounds = []
-    elif glacier_area > 20:
-        p0 = [-0.02, 0.12, 0, 6.0]
-        bounds = []
-    else:
-        p0 = [-0.05, 0.19, 0.01, 4.0]
-        bounds = []
+    mb, heights = get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=use_generic_dem_heights)
+    # need to standardize elevation range regardless of previous
+    # standardization choice to have a change to fit to Huss
+    if use_generic_dem_heights is False:
+        heights = np.array(standardize(heights))
+
+    glacier_area = len(mask.data[0] == 1) * 100 * 100
 
     glacier_elevation_range = np.max(dem.data[0][mask.data[0] == 1])-np.min(dem.data[0][mask.data[0] == 1])
-    # remove the lowest x m as dh/dt may be to high because of too-large mask
-    cutoff_elevation = 100
-    if standardize is True:
-        cutoff_percent = cutoff_elevation/glacier_elevation_range
-    else:
-        cutoff_percent = cutoff_elevation
+
     if glacier_elevation_range > 300:
-        bins = np.linspace(np.min(heights), np.max(heights), 10)
+        #n_bins = int(np.maximum(len(np.nonzero(mask.data[0] == 1)[0]) / 100, 10))
+        n_bins = int(glacier_elevation_range / 30)
+        bins = np.linspace(np.min(heights), np.max(heights), n_bins)
         bin_inds = np.digitize(heights, bins)
         heights_binned = np.array([heights[bin_inds == i].mean() for i in range(1, len(bins))])
-        dhdt_binned = [dhdt.data[0][mask.data[0] == 1][bin_inds == i].mean() for i in range(1, len(bins))]
-        # try to fit. Since params can't always be found, try the following order:
-        # 1) with cutoff height
-        # 2) without cutoff height
-        # 3) with cutoff height and not the choice of bin_heights
-        # 4) without cutoff height and not the choice of bin_heights
+        dhdt_binned = np.array([dhdt.data[0][mask.data[0] == 1][bin_inds == i].mean() for i in range(1, len(bins))])
         if bin_heights is True:
-            fitting_input = [heights_binned, dhdt_binned]
+            fitting_input = [heights_binned,  dhdt_binned]
         else:
             fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
-        try:
-            print('trying to fit with preferred options...')
-            params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0])[fitting_input[0] > cutoff_percent], ydata = np.array(fitting_input[1])[fitting_input[0] > cutoff_percent])[0]#, p0 = p0, bounds = bounds)[0]
-        except(RuntimeError):
-            print('option 1 for fitting failed, trying option 2...')
+
+        def least_squares_dhdt(x, a, b, c, gamma):
+            y = (x + a)**gamma + b*(x + a) + c
+            return y#.astype('float64')
+
+        def find_cutoff_percent():#heights, dhdt_masked, n_bins):
+            bins = np.linspace(np.min(heights), np.max(heights), n_bins * 3)
+            bin_inds = np.digitize(heights, bins)
+            heights_binned = np.array([heights[bin_inds == i].mean() for i in range(1, len(bins))])
+            dhdt_binned = np.array([dhdt.data[0][mask.data[0] == 1][bin_inds == i].mean() for i in range(1, len(bins))])
+            min_ind = np.where(dhdt_binned == np.nanmin(dhdt_binned))[0]
+            cutoff_percent = heights_binned[min_ind]
+            return cutoff_percent
+
+        # remove the lowest x m as dh/dt may be to high because of too-large mask
+        if cutoff_elevation is None:
+            cutoff_percent = find_cutoff_percent()[0]
+            print('cutoff elevation: {}'.format(cutoff_percent*glacier_elevation_range))
+        else:
+            cutoff_percent = cutoff_elevation/glacier_elevation_range
+
+        # fitting input needs to have at least 4 data points to fit 4 params;
+        # if not, assign mean to dhdt
+        if (1-cutoff_percent) * glacier_elevation_range < 150:
+            dhdt_fit_field = dem*mask
+            dhdt_fit_field.data[0][mask.data[0] == 1] = np.mean(dhdt.data[0][mask.data[0] == 1])
+        else:
+            # values for the params as given by Huss; currently not used
+            if glacier_area < 5 * 1e6:
+                p0 = np.array([0., 0.6, 0.09, 2.0]).astype('float64')
+                bounds = (np.array([-.5, -5, -.5, -3], dtype = 'float64'), np.array([.5, 5, .5, 6], dtype = 'float64'))
+            elif glacier_area > 20 * 1e6:
+                p0 = [-0.02, 0.12, 0, 6.0]
+                bounds = []
+            else:
+                p0 = [-0.05, 0.19, 0.01, 4.0]
+                bounds = []
+
+            # try to fit. Since params can't always be found, try the following order:
+            # 1) with cutoff height
+            # 2) with cutoff height and not the choice of bin_heights
+            # 3) without cutoff height
+            # 4) without cutoff height and not the choice of bin_heights
+
+            def fit_Huss(fitting_input, cutoff, cutoff_percent):
+                # change dhdt to follow Huss
+                fit_in = [[], []]
+                fit_in[1] = -(fitting_input[1]-1)
+                fit_in[0] = -(fitting_input[0]-1)
+                fit_in_min = np.min(fit_in[1])
+                fit_in_max = np.max(fit_in[1])
+                fit_in[0] = normalize(fit_in[0])
+                fit_in[1] = normalize(fit_in[1])
+                if cutoff is True:
+                    fit_in_cutoff = [[], []]
+                    fit_in_cutoff[0] = fit_in[0][fit_in[0] <= (1-cutoff_percent)]
+                    fit_in_cutoff[1] = fit_in[1][fit_in[0] <= (1-cutoff_percent)]
+                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = fit_in_cutoff[0].astype('float64'), ydata = fit_in_cutoff[1].astype('float64'))[0]#, p0=p0.astype('float64'), bounds=bounds)[0]#, p0 = p0, bounds = bounds)[0]
+                else:
+                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = fit_in[0].astype('float64'), ydata = fit_in[1].astype('float64'))[0]#, p0=p0, bounds=bounds)[0]
+                return params, fit_in_max, fit_in_min
+
+            cutoff = True
             try:
-                params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0]), ydata = np.array(fitting_input[1]))[0]
+                print('trying to fit with preferred options...')
+                params, f_max, f_min = fit_Huss(fitting_input, cutoff, cutoff_percent)
             except(RuntimeError):
-                print('option 2 for fitting failed, trying option 3...')
+                print('option 1 for fitting failed, trying option 2...')
                 try:
                     if bin_heights is True:
                         fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
                     else:
                         fitting_input = [heights_binned, dhdt_binned]
-                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0])[fitting_input[0] > cutoff_percent], ydata = np.array(fitting_input[1])[fitting_input[0] > cutoff_percent])[0]
+                    params, f_max, f_min = fit_Huss(fitting_input, cutoff, cutoff_percent)
                 except(RuntimeError):
-                    print('option 3 for fitting failed, trying option 4...')
-                    if bin_heights is True:
-                        fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
-                    else:
-                        fitting_input = [heights_binned, dhdt_binned]
-                    params = scipy.optimize.curve_fit(least_squares_dhdt, xdata = np.array(fitting_input[0]), ydata = np.array(fitting_input[1]))[0]
-        print('...fitting successfull')
-        dhdt_fit = least_squares_dhdt(heights, params[0], params[1], params[2], params[3])
-        dhdt_fit[np.isnan(dhdt_fit)] = np.nanmin(dhdt_fit)
-        dhdt_fit_field = dem*mask
-        dhdt_fit_field.data[0][mask.data[0] == 1] = dhdt_fit
+                    print('option 2 for fitting failed, trying option 3...')
+                    try:
+                        if bin_heights is True:
+                            fitting_input = [heights_binned, dhdt_binned]
+                        else:
+                            fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
+                        params, f_max, f_min = fit_Huss(fitting_input, not cutoff, cutoff_percent)
+                    except(RuntimeError):
+                        print('option 3 for fitting failed, trying option 4...')
+                        if bin_heights is True:
+                            fitting_input = [heights, dhdt.data[0][mask.data[0] == 1]]
+                        else:
+                            fitting_input = [heights_binned, dhdt_binned]
+                        params, f_max, f_min = fit_Huss(fitting_input, not cutoff, cutoff_percent)
+            print('...fitting successfull')
+            dhdt_fit = least_squares_dhdt(-(heights-1), params[0], params[1], params[2], params[3])
+            # scale dhdt back to original range
+            dhdt_fit = (dhdt_fit * (f_max - f_min) + f_min) * -1 + 1
+            dhdt_fit[np.isnan(dhdt_fit)] = np.nanmin(dhdt_fit)
+            dhdt_fit_field = dem*mask
+            dhdt_fit_field.data[0][mask.data[0] == 1] = dhdt_fit
     else:
         dhdt_fit_field = dem*mask
-        dhdt_fit_field.data[0][mask.data[0] == 1] = dhdt.mean().data
+        dhdt_fit_field.data[0][mask.data[0] == 1] = np.mean(dhdt.data[0][mask.data[0] == 1])
 
     # modify either smb or dhdt so that they balance
     k = 0
     learning_rate = 0.2
     mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt_fit_field.data[0][mask.data[0]==1])
+    print('There is a mismatch of {} m w eq. between mass balance and dhdt which is being resolved now...'.format(round(mb_misfit/1, 2)))
     while abs(mb_misfit) > 0.01:
         mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt_fit_field.data[0][mask.data[0]==1]) - k 
         k += mb_misfit * learning_rate
-
-    if modify_dhdt_or_smb == 'smb':
-        mb -= k * mask
-    else:
-        dhdt_fit_field += k
+    print('...a bias of {} had to be applied to make mass balance and dhdt match'.format(round(k, 2)))
+    #if modify_dhdt_or_smb == 'smb':
+    #    mb -= k * mask
+    #else:
+    #    dhdt_fit_field += k
 
     return mb, dhdt_fit_field
+
+
+
+def resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights=True, modify_dhdt_or_smb='smb'):
+
+    mb, heights = get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=use_generic_dem_heights)
+    dhdt.data[0][mask.data[0] == 0] = np.nan
+    dhdt.data[0] = gauss_filter(dhdt.data[0], 1, 3)
+    dhdt.data[0][mask.data[0] == 0] = 0
+    mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt.data[0][mask.data[0]==1])
+    print('There was a mismatch of {} m w eq. between mass balance and dhdt which is resolved now...'.format(round(mb_misfit/1, 2)))
+    if modify_dhdt_or_smb == 'smb':
+        mb -= mb_misfit
+    else:
+        dhdt += mb_misfit
+
+    return mb, dhdt
+    
+
+    
+'''
+cutoffs = [0,50,100,200,300, None]
+colormap = plt.cm.viridis
+colors = [colormap(i) for i in np.linspace(0, 1,len(cutoffs))]
+plt.scatter(dem.data[0][mask.data[0] == 1], dhdt.data[0][mask.data[0] == 1])
+for q,i in enumerate(cutoffs):
+    mb, dhdt_fit_field2 = resolve_mb_dhdt(RID, dhdt, dem, mask, use_generic_dem_heights=True, bin_heights = False, cutoff_elevation = i)
+    plt.scatter(dem.data[0][mask.data[0] == 1], dhdt_fit_field2.data[0][mask.data[0] == 1], color = colors[q])
+
+plt.show()
+'''
