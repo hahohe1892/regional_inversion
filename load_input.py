@@ -9,6 +9,8 @@ from funcs import *
 from rioxarray import merge
 import xarray as xr
 import scipy
+from shapely.ops import unary_union
+from get_input import *
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -256,11 +258,16 @@ def nearby_glacier(RID, RGI, buffer_width):
 
     def neighboring_glacier(RID, RGI, buffer_width):
         glacier_buffer = RGI[RGI.RGIId == RID].buffer(buffer_width)
-        intersection = RGI.intersection(glacier_buffer.iloc[0])
+        RGI_minus_one = deepcopy(RGI)
+        RGI_minus_one[RGI_minus_one.RGIId == RID] = None
+        intersection = RGI_minus_one.intersection(glacier_buffer.iloc[0])
         intersection_indices = np.nonzero(~intersection.is_empty.to_numpy())
         intersection_RIDs = RGI.iloc[intersection_indices].RGIId
-        return intersection_RIDs
-    area_RIDs = neighboring_glacier(RID, RGI, buffer_width).to_list()
+        intersection_polys = intersection.iloc[intersection_indices]
+        bounds = RGI.iloc[intersection_indices].geometry.bounds
+        return intersection_RIDs, intersection_polys, bounds
+    area_RIDs, intersection_polys, bounds = neighboring_glacier(RID, RGI, buffer_width)
+    area_RIDs = area_RIDs.to_list()
     old_len = 0
     checked_RIDs = []
     new_RIDs = deepcopy(area_RIDs)
@@ -269,16 +276,26 @@ def nearby_glacier(RID, RGI, buffer_width):
         print(old_len)
         new_area_RIDs = []
         for area_RID in new_RIDs:
-            new_area_RIDs.extend(neighboring_glacier(area_RID, RGI, 200))
+            neighbor_RIDs, neighbor_polys, neighbor_bounds = neighboring_glacier(area_RID, RGI, 200)
+            new_area_RIDs.extend(neighbor_RIDs)
+            intersection_polys = intersection_polys.append(neighbor_polys)
+            bounds = pd.concat([bounds, neighbor_bounds])
             checked_RIDs.append(area_RID)
         new_RIDs = [x for x in new_area_RIDs if x not in checked_RIDs]
         new_RIDs = np.unique(new_RIDs).tolist()
         area_RIDs.extend(new_RIDs)
-
-    return area_RIDs
+    return area_RIDs, intersection_polys, bounds
 
 
 def obtain_area_mosaic(RID):
+    '''
+    searches for nearby (within 200 m buffer) glaciers based on RGI polygons,
+    extracts their RID, bounds and the overlap between the buffer and the nearby glaciers.
+    Creates a big raster from bounds using crs from input glacier and reproject_matches
+    all nearby glaciers to this raster. Then mosaics all that into one big raster.
+    This procedure can leave holes at glacier boundaries due to rasterization.
+    Identifies these holes based on overlap.
+    '''
     working_dir = '/home/thomas/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     Fill_Value = 9999.0
@@ -293,10 +310,15 @@ def obtain_area_mosaic(RID):
     input_igm = input_igm.fillna(Fill_Value)
     fr = utils.get_rgi_region_file(RGI_region, version='62')
     gdf = gpd.read_file(fr)
-    gdf = gdf.to_crs(gdf.crs.from_epsg('32632'))
-    area_RIDs = nearby_glacier(RID, gdf, 200)
+    gdf = gdf.to_crs(input_igm.rio.crs)#gdf.crs.from_epsg('32632'))
+    area_RIDs, area_polys, bounds = nearby_glacier(RID, gdf, 200)
+    min_x, min_y = bounds.min()['minx']-1000, bounds.min()['miny']-1000 # add 1000 m to bounds as extra padding
+    max_x, max_y = bounds.max()['maxx']+1000, bounds.max()['maxy']+1000
+    input_igm = input_igm.rio.pad_box(min_x, min_y, max_x, max_y)
     mosaic_list = [input_igm]
-    for glacier in area_RIDs[1:]:
+    for glacier in area_RIDs:
+        if glacier == RID:
+            continue
         glacier_dir = '/home/thomas/regional_inversion/output/' + glacier
         input_file = glacier_dir + '/input.nc'
         input = rioxr.open_rasterio(input_file)
@@ -306,11 +328,23 @@ def obtain_area_mosaic(RID):
         for var in input.data_vars:
             input.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
         input = input.fillna(Fill_Value)
-        input = input.rio.reproject(input_igm.rio.crs)
+        # using reproject as below somehow didn't work (creates displacement between orignal glacier and mosaic), not sure why
+        #input = input.rio.reproject(input_igm.rio.crs)
+        input = input.rio.reproject_match(input_igm)
         mosaic_list.append(input)
-    mosaic = merge.merge_datasets(mosaic_list)#, nodata = 9999.0)#, method = 'max')
+    mosaic = merge.merge_datasets(mosaic_list, crs = input_igm.rio.crs)
     mosaic = mosaic.where(mosaic != Fill_Value)
-    return mosaic
+    # to find gaps between glaciers, create new mask mosaic based on polygons
+    # and take difference to mosaic mask created above
+    area_polys = area_polys[area_polys != None]
+    union = gpd.GeoSeries(unary_union(area_polys))
+    out_path = os.path.join(working_dir, 'intersection_mask.tif')
+    raster_union_out = mask_from_polygon(union[0], area_polys, out_path = out_path)
+    raster_union = rioxr.open_rasterio(out_path)
+    raster_union = raster_union.rio.write_nodata(0)
+    raster_union = raster_union.rio.reproject_match(mosaic, all_touched = True)
+    internal_boundaries = np.maximum(raster_union - mosaic.mask.fillna(0), 0)
+    return mosaic, internal_boundaries
 
 
 def get_mb_gradient_Rounce(RID, use_generic_dem_heights=True):
