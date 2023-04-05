@@ -11,6 +11,8 @@ import xarray as xr
 import scipy
 from shapely.ops import unary_union
 from get_input import *
+from sklearn.linear_model import LinearRegression
+import pwlf
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
@@ -302,11 +304,11 @@ def obtain_area_mosaic(RID):
 
     RGI_region = RID.split('-')[1].split('.')[0]
     input_igm = rioxr.open_rasterio(input_file)
-    input_igm = input_igm.squeeze()
-    input_igm = input_igm.where(input_igm.mask != 0)
     input_igm.attrs['_FillValue'] = Fill_Value
     for var in input_igm.data_vars:
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
+        if var != 'usurf':
+            input_igm.data_vars[var].values = input_igm.data_vars[var].where(input_igm.mask == 1)
     input_igm = input_igm.fillna(Fill_Value)
     fr = utils.get_rgi_region_file(RGI_region, version='62')
     gdf = gpd.read_file(fr)
@@ -322,11 +324,11 @@ def obtain_area_mosaic(RID):
         glacier_dir = '/home/thomas/regional_inversion/output/' + glacier
         input_file = glacier_dir + '/input.nc'
         input = rioxr.open_rasterio(input_file)
-        input = input.squeeze()
         input.attrs['_FillValue'] = Fill_Value
-        input = input.where(input.mask != 0)
         for var in input.data_vars:
             input.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
+            if var != 'usurf':
+                input.data_vars[var].values = input.data_vars[var].where(input.mask == 1)
         input = input.fillna(Fill_Value)
         # using reproject as below somehow didn't work (creates displacement between orignal glacier and mosaic), not sure why
         #input = input.rio.reproject(input_igm.rio.crs)
@@ -337,14 +339,17 @@ def obtain_area_mosaic(RID):
     # to find gaps between glaciers, create new mask mosaic based on polygons
     # and take difference to mosaic mask created above
     area_polys = area_polys[area_polys != None]
-    union = gpd.GeoSeries(unary_union(area_polys))
-    out_path = os.path.join(working_dir, 'intersection_mask.tif')
-    raster_union_out = mask_from_polygon(union[0], area_polys, out_path = out_path)
-    raster_union = rioxr.open_rasterio(out_path)
-    raster_union = raster_union.rio.write_nodata(0)
-    raster_union = raster_union.rio.reproject_match(mosaic, all_touched = True)
-    internal_boundaries = np.maximum(raster_union - mosaic.mask.fillna(0), 0)
-    return mosaic, internal_boundaries
+    if len(area_polys) == 0:
+        internal_boundaries = None
+    else:
+        union = gpd.GeoSeries(unary_union(area_polys))
+        out_path = os.path.join(working_dir, 'intersection_mask.tif')
+        raster_union_out = mask_from_polygon(union[0], area_polys, out_path = out_path)
+        raster_union = rioxr.open_rasterio(out_path)
+        raster_union = raster_union.rio.write_nodata(0)
+        raster_union = raster_union.rio.reproject_match(mosaic, all_touched = True)
+        internal_boundaries = np.maximum(raster_union - mosaic.mask.fillna(0), 0)
+    return mosaic, internal_boundaries, area_RIDs
 
 
 def get_mb_gradient_Rounce(RID, use_generic_dem_heights=True):
@@ -531,9 +536,44 @@ def resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights=True
         dhdt += mb_misfit
 
     return mb, dhdt
-    
 
-    
+
+def resolve_mb_dhdt_piecewise_linear(RID, dhdt, dem, mask, use_generic_dem_heights=True, modify_dhdt_or_smb='smb'):
+    mb, heights = get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=use_generic_dem_heights)
+    if np.isnan(heights[0]).all():
+        apparent_mb_fit = np.zeros_like(dem.data[0])[mask.data[0] == 1]
+    else:
+        mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt.data[0][mask.data[0]==1])
+        print('There was a mismatch of {} m w eq. between mass balance and dhdt which is resolved now...'.format(round(mb_misfit/1, 2)))
+        if modify_dhdt_or_smb == 'smb':
+            mb -= mb_misfit
+        else:
+            dhdt += mb_misfit
+
+        apparent_mb = (mb - dhdt)*mask
+        my_pwlf = pwlf.PiecewiseLinFit(dem.data[0][mask.data[0] == 1], apparent_mb.data[0][mask.data[0] == 1])
+        res = my_pwlf.fit(2)
+        apparent_mb_fit = np.zeros_like(apparent_mb.data[0])
+        apparent_mb_fit[mask.data[0] == 1] = my_pwlf.predict(dem.data[0][mask.data[0] == 1])
+        for i in range(5):
+            ELA_ind = np.where(abs(apparent_mb_fit[mask.data[0] == 1])==np.min(abs(apparent_mb_fit[mask.data[0] == 1])))
+            ELA = dem.data[0][mask.data[0] == 1][ELA_ind[0][0]]
+            res = my_pwlf.fit_with_breaks(np.array([min(dem.data[0][mask.data[0] == 1]), ELA, max(dem.data[0][mask.data[0] == 1])]))
+            apparent_mb_fit[mask.data[0] == 1] = my_pwlf.predict(dem.data[0][mask.data[0] == 1])
+        if (my_pwlf.slopes < 0).any():
+            X = dem.data[0][mask.data[0] == 1]
+            Y = apparent_mb.data[0][mask.data[0] == 1]
+            apparent_mb_fit = np.zeros_like(apparent_mb.data[0])
+            apparent_mb_fit[mask.data[0] == 1] = LinearRegression().fit(X.reshape(-1,1), Y.reshape(-1,1)).predict(X.reshape(-1,1)).reshape(1,-1)[0]
+
+    return mb, dhdt, apparent_mb_fit
+        
+def write_path_to_mosaic(RID, area_RIDs):
+    for area_RID in area_RIDs:
+        working_dir = os.path.join('/home/thomas/regional_inversion/output/', area_RID)
+        with open(os.path.join(working_dir, 'mosaic_reference.txt'), 'w') as fp:
+            fp.write('This glacier is part of a larger glaciated area,\nand the results therefore can be found under the following RGI ID:\n{}'.format(RID))
+            
 '''
 cutoffs = [0,50,100,200,300, None]
 colormap = plt.cm.viridis
