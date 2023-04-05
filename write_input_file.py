@@ -12,6 +12,9 @@ import rioxarray as rioxr
 import scipy
 
 #RID = 'RGI60-08.01657'
+fr = utils.get_rgi_region_file('08', version='62')
+gdf = gpd.read_file(fr)
+
 def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_heights = True, modify_dhdt_or_smb = 'smb'):
 
     Fill_Value = 9999.0
@@ -37,6 +40,10 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
         raise ValueError('No suitable DEM found, cannot proceed')
 
     dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif')) * 0.85 #convert from m/yr to m.w.eq.
+    dhdt = dhdt.rio.write_nodata(Fill_Value)
+    dhdt.data[0][abs(dhdt.data[0])>1e3] = dhdt.rio.nodata
+    dhdt = dhdt.rio.interpolate_na()
+
     dem = dem.rio.reproject_match(dhdt)
 
     if RID in RIDs_Sweden.tolist():
@@ -54,9 +61,13 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
     consensus_thk.data[0][mask.data[0] == 0] = 0
     vel_Millan = rioxr.open_rasterio(os.path.join(input_dir, 'vel_Millan', per_glacier_dir, 'dem.tif'))
 
-    mb, dhdt = resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights = use_generic_dem_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
+    #mb, dhdt = resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights = use_generic_dem_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
+    #apparent_mb = (mb - dhdt)*mask
+    print(RID)
+    apparent_mb = deepcopy(dhdt)
+    mb, dhdt, apparent_mb.data[0] = resolve_mb_dhdt_piecewise_linear(RID, dhdt, dem, mask, use_generic_dem_heights = use_generic_dem_heights, modify_dhdt_or_smb = modify_dhdt_or_smb)
 
-    apparent_mb = (mb - dhdt)*mask
+
 
     dem.name = 'usurf'
     dem = dem.squeeze()
@@ -345,10 +356,3 @@ def correct_mask(RID):
     nc.close()
     
     mask.rio.to_raster(path)
-
-
-glaciers_Sweden = get_RIDs_Sweden()
-RIDs_Sweden = glaciers_Sweden.RGIId
-
-#for RID in RIDs_Sweden:
-#    write_input_file(RID, new_mask = True, period = '2000-2020')
