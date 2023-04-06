@@ -13,19 +13,19 @@ from funcs import normalize
 from sklearn.linear_model import LinearRegression
 
 #RID = 'RGI60-08.00213' # Storglaciären
-#RID = 'RGI60-08.00188' # Rabots
+RID = 'RGI60-08.00188' # Rabots
 #RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
 #RID = 'RGI60-08.00121' # Mikkajekna
 #RID = 'RGI60-07.01475' # Droenbreen
 #RID = 'RGI60-07.00389' # Bergmesterbreen
 #RID = 'RGI60-08.00434' # Tunsbergdalsbreen
-RID = 'RGI60-08.01657' # Svartisen
+#RID = 'RGI60-08.01657' # Svartisen
 #RID = 'RGI60-08.01779' # Hardangerjökulen
 
 override_inputs = True
-check_in_session = False # if this is false, global checking is activated
-override_global = True
+check_in_session = True # if this is false, global checking is activated
+override_global = False
 if check_in_session is False: # in that case, we check if this glacier should be modelled in check_file
     check_file = '/home/thomas/regional_inversion/already_checked.txt'
     if override_global is True:
@@ -36,7 +36,7 @@ fr = utils.get_rgi_region_file('08', version='62')
 gdf = gpd.read_file(fr)
 Fill_Value = 9999.0
 already_checked = []
-#for RID in gdf.RGIId.to_list():
+#for RID in gdf.RGIId.to_list()[4:]:
 for RID in [RID]:
     # check if this glacier has been modelled either in this session, or ever
     if check_in_session is False:
@@ -104,7 +104,7 @@ for RID in [RID]:
     theta = 0.3
     bw = 0
     p_save = 10
-    p_mb = -800  # iterations before end when mass balance is recalculated
+    p_mb = 100  # iterations before end when mass balance is recalculated
     s_refresh = 400
     
     # establish buffer
@@ -151,7 +151,7 @@ for RID in [RID]:
             if p > 600 and p % s_refresh == 0:
                 #glacier.usurf.assign(S_ref)
                 S_diff = S_ref - glacier.usurf.numpy()
-                S_diff = gauss_filter(S_diff, 2,4)*mask
+                S_diff = gauss_filter(S_diff, 1,3)*mask
                 glacier.usurf.assign(glacier.usurf.numpy() + S_diff)
                 theta+=.1
             #beta = ((-10*beta_0)/(beta_update+10)) +beta_0
@@ -197,15 +197,16 @@ for RID in [RID]:
             #left_sum[-1] += np.sum(np.maximum(new_bed - glacier.usurf, 0))
             new_bed = np.minimum(glacier.usurf, new_bed)
 
-            if p == (pmax - p_mb):
+            #if p == (pmax - p_mb):
+            if p == 600:
                 left_sum_mean = np.mean(left_sum[-100:])
-                #abl_area_size = len(np.nonzero(glacier.smb<0)[0])
-                abl_area_size = len(np.nonzero(np.logical_and(glacier.thk<10, mask == 1))[0])
-                #abl_area_size = len(np.nonzero(mask == 1)[0])
+                #abl_area_size = len(np.nonzero(a_smb<0)[0])
+                #abl_area_size = len(np.nonzero(np.logical_and(glacier.thk<10, mask == 1))[0])
+                abl_area_size = len(np.nonzero(mask == 1)[0])
                 left_sum_per_area = left_sum_mean / abl_area_size
                 smb_new = deepcopy(a_smb)
-                #smb_new[mask == 1] += left_sum_per_area
-                smb_new[np.logical_and(glacier.thk<10, mask == 1)] += left_sum_per_area
+                smb_new[mask == 1] += left_sum_per_area
+                #smb_new[np.logical_and(glacier.thk<10, mask == 1)] += left_sum_per_area
                 glacier.smb.assign(smb_new)
                 #new_bed[np.logical_and(glacier.thk<10, mask == 1)] -= left_sum_per_area
                 #trend = LinearRegression().fit((S_ref[mask == 1]).reshape(-1,1), (glacier.usurf.numpy()-S_ref)[mask == 1].reshape(-1,1)).predict(S_ref[mask == 1].reshape(-1,1)).reshape(1,-1)[0]
@@ -216,8 +217,8 @@ for RID in [RID]:
             glacier.topg.assign(new_bed)
             glacier.thk.assign(np.maximum(0, (glacier.usurf - glacier.topg)))#*glacier.icemask)
             # save data
-            #B_rec_all.append(glacier.thk.numpy())
-            #misfit_all.append(misfit)
+            B_rec_all.append(glacier.thk.numpy())
+            misfit_all.append(misfit)
 
             # prepare next iteration
             p += 1
