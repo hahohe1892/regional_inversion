@@ -305,6 +305,7 @@ def obtain_area_mosaic(RID):
     RGI_region = RID.split('-')[1].split('.')[0]
     input_igm = rioxr.open_rasterio(input_file)
     input_igm.attrs['_FillValue'] = Fill_Value
+    input_igm = input_igm.assign(mask_count = input_igm.mask)
     for var in input_igm.data_vars:
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
         if var != 'usurf':
@@ -318,6 +319,7 @@ def obtain_area_mosaic(RID):
     max_x, max_y = bounds.max()['maxx']+1000, bounds.max()['maxy']+1000
     input_igm = input_igm.rio.pad_box(min_x, min_y, max_x, max_y)
     mosaic_list = [input_igm]
+    i = 2
     for glacier in area_RIDs:
         if glacier == RID:
             continue
@@ -325,6 +327,8 @@ def obtain_area_mosaic(RID):
         input_file = glacier_dir + '/input.nc'
         input = rioxr.open_rasterio(input_file)
         input.attrs['_FillValue'] = Fill_Value
+        input = input.assign(mask_count = input.mask * i)
+        i+=1
         for var in input.data_vars:
             input.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
             if var != 'usurf':

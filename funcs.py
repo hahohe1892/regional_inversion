@@ -160,7 +160,9 @@ def gauss_filter(U, sigma, truncate):
     W[np.isnan(U)]=0
     WW=ndimage.gaussian_filter(W,sigma=sigma,truncate=truncate)
 
-    Z=VV/WW
+    Z = np.zeros_like(U)
+    Z[WW != 0]=VV[WW != 0]/WW[WW != 0]
+    #Z=VV/WW
     return Z
 
 #from IPython.display import display, Javascript
@@ -431,7 +433,7 @@ def qsplot(x,y,ux,uv,flux = None, thk = None, show = True, **kwargs):
         ux = -1 * ux
     if y[0] > y[-1]:
         y = np.flip(y)
-        uv = -1 * uv
+        #uv = -1 * uv
     if thk is not None:
         plt.pcolor(x,y,thk, cmap = 'twilight', **thk_kwargs)
     plt.streamplot(x, y, ux, uv, **kwargs)
@@ -477,3 +479,7 @@ def movieqs(extra, step=1, file_name = 'animation.mp4', **kwargs):
     animation.save(file_name, dpi = 300)
     cmd = ['xdg-open', file_name]
     subprocess.call(cmd)
+
+
+def normalize(x):
+    return (x-np.nanmin(x))/(np.nanmax(x) - np.nanmin(x))
