@@ -95,6 +95,9 @@ def get_vel_dir(RID, custom_dx = None):
 #poly = gdf.geometry.loc[4]
 
 def mask_from_polygon(poly, gdf, out_path = '/home/thomas/regional_inversion/test.tif', projected = True):
+    '''
+    creates a 30 m resolution mask based on a polygone outline for a glacier with a specified buffer around it. 
+    '''
     if projected is False:
         dy = geopy.distance.distance((poly.bounds[3], poly.bounds[0]), (poly.bounds[1], poly.bounds[0])).m
         dx = geopy.distance.distance((poly.bounds[1], poly.bounds[0]),  (poly.bounds[1], poly.bounds[2])).m
@@ -143,6 +146,27 @@ def mask_from_polygon(poly, gdf, out_path = '/home/thomas/regional_inversion/tes
     print('obtained mask based on RGI inventory and placed it in {}'.format(out_path))
 
 
+def fill_nans_mosaic(mosaic, RGI_region = '08'):
+    '''
+    This may be the most accurate way of interpolating nan values of dhdt.
+    However, it crashes the RAM if run for the whole RGI region.
+    Instead, simply interpolating (e.g. in write_input_file_Sweden_Norway)
+    is probably also fine.
+    '''
+    fr = utils.get_rgi_region_file(RGI_region, version='62')
+    gdf = gpd.read_file(fr)
+    gdf = gdf.to_crs(mosaic.rio.crs) # project RGI inventory to prevent distortion
+    #gdf = gdf.buffer(500)
+    gdf = gdf[gdf.RGIId == RID].buffer(500)
+    mask = deepcopy(mosaic)
+    mask.data[0] = np.ones_like(mask.data[0])
+    mask = mask.rio.clip(gdf.geometry, drop = True)
+    mask.data[0][mask.data[0] == mask.rio.nodata] = 0
+    mosaic = mosaic.rio.clip(gdf.geometry, drop = True)
+    mosaic.data[0] = mosaic.data[0]*mask.data[0]
+    mosaic = mosaic.rio.interpolate_na()
+    
+    
 def get_complete_input(RGI_region):
     fr = utils.get_rgi_region_file(RGI_region, version='62')
     gdf = gpd.read_file(fr)
@@ -157,39 +181,3 @@ def get_complete_input(RGI_region):
         if not os.path.isdir(mask_path):
             os.makedirs(mask_path)
         mask_from_polygon(gdf[gdf.RGIId == RID].geometry.iloc[0], gdf, out_path = os.path.join(mask_path, RID + '_mask.tif'))
-
-
-'''
-DEMs = utils.DEM_SOURCES
-
-for DEM in [DEMs[0]]:
-    #DEM_dir = '/home/thomas/regional_inversion/input_data/DEM_' + DEM
-    DEM_dir = '/home/thomas/regional_inversion/input_data/outlines'
-    cfg.initialize(logging_level='WARNING')
-    if not os.path.isdir(DEM_dir):
-        os.mkdir(DEM_dir)
-    cfg.PATHS['working_dir'] = DEM_dir
-
-    fr = utils.get_rgi_region_file('08', version='62')  # Scandinavia
-    gdf = gpd.read_file(fr)
-    gdirs = workflow.init_glacier_directories(gdf, from_prepro_level = 1, prepro_border=160)
-
-    for gdir in gdirs:
-        #cfg.PATHS['dem_file'] = '/home/thomas/regional_inversion/input_data/dhdt_all/dhdt/mosaic_{}.tif'.format(period)
-        cfg.PATHS['dem_file'] = '/home/thomas/regional_inversion/input_data/outlines/RGI_outlines_raster_georeferenced_noData.tif'
-        try:
-            gis.define_glacier_region(gdir, source = 'USER')
-            #workflow.execute_entity_task(bedtopo.add_consensus_thickness, gdir)
-        except exceptions.InvalidDEMError:
-p            print('no DEM found here')
-p            continue
-
-
-# add conensus ice thickness to DEM gridded data
-fr = utils.get_rgi_region_file('08', version='62')  # Scandinavia
-gdf = gpd.read_file(fr)
-RIDs = gdf['RGIId']
-for RID in RIDs.loc[10:]:
-    gdir = load_dem_gdir(RID)
-    workflow.execute_entity_task(bedtopo.add_consensus_thickness, gdir)
-'''

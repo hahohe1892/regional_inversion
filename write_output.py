@@ -31,12 +31,18 @@ def out_to_tif(RID, field, i=-1, file = 'output.nc', threshold = np.nan, file_no
     out.rio.to_raster(path)
 
 
-def all_out_to_Win(field, i = ':', file = 'output.nc', date = '01/01/01/1970', threshold=np.nan, file_not_standard_dims = False, flip = False):
+def all_out_to_Win(field, i = ':', file = 'output.nc', date = '01/01/01/1970', threshold=np.nan, file_not_standard_dims = False, flip = False, only_Sweden = False):
     ''' date should be given as "hh/dd/mm/yyyy'''
-    glaciers_Sweden = get_RIDs_Sweden()
-    RIDs_Sweden = glaciers_Sweden.RGIId
+    if only_Sweden is True:
+        glaciers_Sweden = get_RIDs_Sweden()
+        RIDs = glaciers_Sweden.RGIId
+    else:
+        RGI_region = '08'
+        fr = utils.get_rgi_region_file(RGI_region, version='62')
+        gdf = gpd.read_file(fr)
+        RIDs = gdf.RGIId.to_list()[4:]
 
-    for RID in RIDs_Sweden:
+    for RID in RIDs:
         try:
             path = '/home/thomas/regional_inversion/output/' + RID + '/' + file
             date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
@@ -44,6 +50,7 @@ def all_out_to_Win(field, i = ':', file = 'output.nc', date = '01/01/01/1970', t
             if file_time > date_unix:
                 out_to_tif(RID, field, file = file, i = i, threshold = threshold, file_not_standard_dims = file_not_standard_dims, flip = flip)
                 shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/'+ field + '.tif', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_' + field + '.tif')
+                print(RID + ' done')
         except FileNotFoundError:
             print('field {} does not exist for glacier {}'.format(field, RID))
             continue

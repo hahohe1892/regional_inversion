@@ -11,9 +11,10 @@ from sklearn.preprocessing import normalize
 from load_input import obtain_area_mosaic
 from funcs import normalize
 from sklearn.linear_model import LinearRegression
+from geocube.api.core import make_geocube
 
 #RID = 'RGI60-08.00213' # Storglaciären
-RID = 'RGI60-08.00188' # Rabots
+#RID = 'RGI60-08.00188' # Rabots
 #RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
 #RID = 'RGI60-08.00121' # Mikkajekna
@@ -22,6 +23,13 @@ RID = 'RGI60-08.00188' # Rabots
 #RID = 'RGI60-08.00434' # Tunsbergdalsbreen
 #RID = 'RGI60-08.01657' # Svartisen
 #RID = 'RGI60-08.01779' # Hardangerjökulen
+#RID = 'RGI60-08.02666' # Aalfotbreen
+#RID = 'RGI60-08.01258' # Langfjordjökulen
+#RID = 'RGI60-08.02382' # Rundvassbreen
+#RID = 'RGI60-08.00966' # Vestre Memurubreen
+#RID = 'RGI60-08.00987' # Graasubreen
+#RID = 'RGI60-08.00312' # Storbreen
+RID = 'RGI60-08.02972' # Botnabrea
 
 override_inputs = True
 check_in_session = True # if this is false, global checking is activated
@@ -83,6 +91,9 @@ for RID in [RID]:
     smb = input_igm.climatic_mass_balance.data
     a_smb = input_igm.apparent_mass_balance.data
     mask = input_igm.mask.data
+    basin = input_igm.mask_count
+    basin.data[basin.data == 0] = Fill_Value
+    basin = basin.rio.interpolate_na().data
     
     #S_ref[mask == 0] = np.nan
     #S_ref = gauss_filter(S_ref,1, 3)
@@ -99,7 +110,7 @@ for RID in [RID]:
     slope_norm[mask == 1] = normalize(-slope[mask == 1]**(1/2))
 
     dt = 1
-    pmax = 2500
+    pmax = 2400
     beta = 1
     theta = 0.3
     bw = 0
@@ -146,6 +157,7 @@ for RID in [RID]:
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)
         p = 0
         left_sum = []
+        basin_left = []
         beta_update = 0
         while p < pmax:
             if p > 600 and p % s_refresh == 0:
@@ -164,8 +176,9 @@ for RID in [RID]:
                 glacier.update_thk()
                 glacier.print_info()
                 if p % p_save == 0:
-                    glacier.update_ncdf_ex()
-                    glacier.update_ncdf_ts()
+                    if p != pmax:
+                        glacier.update_ncdf_ex()
+                        glacier.update_ncdf_ts()
 
             dhdt = (glacier.usurf - S_old)/dt
             misfit = dhdt.numpy()
@@ -173,6 +186,7 @@ for RID in [RID]:
             #misfit = gauss_filter(misfit, 1, 3)
             #misfit[mask == 0] = 0
             left_sum.append(np.sum(dhdt*(-mask+1)))
+            basin_left.append(dhdt*(-mask+1))
             bed_before_buffer = glacier.topg.numpy() - beta * misfit
             misfit_masked = misfit * mask
             # update surface
@@ -200,12 +214,21 @@ for RID in [RID]:
             #if p == (pmax - p_mb):
             if p == 600:
                 left_sum_mean = np.mean(left_sum[-100:])
+                basin_left_mean = np.mean(np.array(basin_left)[-100:], axis = 0)
+                smb_new = deepcopy(a_smb)
+                for b in np.unique(basin):
+                    aoi = np.where(np.logical_and(basin == b, mask == 1))
+                    abl_area_size = len(aoi[0])
+                    b_left_mean = np.sum(basin_left_mean[basin == b])
+                    b_sum_per_area = b_left_mean / abl_area_size
+                    smb_new[aoi] += b_sum_per_area
+                    
                 #abl_area_size = len(np.nonzero(a_smb<0)[0])
                 #abl_area_size = len(np.nonzero(np.logical_and(glacier.thk<10, mask == 1))[0])
                 abl_area_size = len(np.nonzero(mask == 1)[0])
                 left_sum_per_area = left_sum_mean / abl_area_size
-                smb_new = deepcopy(a_smb)
-                smb_new[mask == 1] += left_sum_per_area
+                #smb_new = deepcopy(a_smb)
+                #smb_new[mask == 1] += left_sum_per_area
                 #smb_new[np.logical_and(glacier.thk<10, mask == 1)] += left_sum_per_area
                 glacier.smb.assign(smb_new)
                 #new_bed[np.logical_and(glacier.thk<10, mask == 1)] -= left_sum_per_area
@@ -226,6 +249,24 @@ for RID in [RID]:
             glacier.config.tstart = p*dt
             del glacier.already_called_update_t_dt
 
+    # establish buffer
+    bw = 1
+    mask_iter = mask == 1
+    mask_bw = (~mask_iter)*1
+    buffer = np.zeros_like(mask)
+    for i in range(bw):
+        boundary_mask = mask_bw==0
+        k = np.ones((3,3),dtype=int)
+        boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
+        mask_bw[boundary] = 1
+    buffer = ((mask_bw + mask_iter*1)-1)
+
+    dummy_var.data = glacier.thk.numpy()
+    dummy_var.data[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
+    dummy_var = dummy_var.rio.interpolate_na(method = 'linear')
+    glacier.thk.assign(dummy_var.data)
+    glacier.topg.assign(glacier.thk - glacier.usurf)
+    glacier.update_ncdf_ex()
     glacier.print_all_comp_info()
     #misfit_vs_iter = [np.mean(abs(x[mask == 1])) for x in misfit_all]
 
@@ -254,4 +295,19 @@ glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD < 1e5)
 glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD > -1e5)
 glathida_NO['Difference'] = glathida_NO.THICK_OBS_CORR - glathida_NO.THICK_MOD
 glathida_NO['Percent_difference'] = glathida_NO.Difference/glathida_NO.THICK_OBS_CORR
+glathida_NO = glathida_NO.dropna()
+gla_ras = make_geocube(glathida_NO, resolution = (100,100), output_crs = out_thk.crs)
+gla_ras = gla_ras.rio.reproject_match(input_igm)
+fig, ax = plt.subplots(2,3)
+ax[0,0].imshow(gla_ras.THICK_OBS_CORR, vmin = 0, vmax = np.maximum(gla_ras.THICK_OBS_CORR.max(), np.max(out_thk.read())))
+ax[0,1].imshow(gla_ras.THICK_MOD, vmin = 0, vmax = np.maximum(gla_ras.THICK_OBS_CORR.max(), np.max(out_thk.read())))
+glathida_NO.plot(glathida_NO.THICK_OBS_CORR, ax = ax[0,2])
+ax[1,0].imshow(out_thk.read()[0], vmin = 0, vmax = np.maximum(gla_ras.THICK_OBS_CORR.max(), np.max(out_thk.read())))
+ax[1,1].scatter(gla_ras.THICK_OBS_CORR, glacier.thk, c = basin)
+#ax_ins = ax[1,1].inset_axes()
+#ax_ins.imshow(basin)
+ax[1,1].plot(range(200), range(200), '--', c='r')
+ax[1,1].set(adjustable='box', aspect='equal')
+ax[1,2].imshow(glacier.smb, vmin = -3, vmax = 3, cmap = 'RdBu')
+plt.show()
 '''
