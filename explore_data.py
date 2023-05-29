@@ -133,3 +133,61 @@ dhdt_fit_field = (k + res_small.params[1] * ((dem - np.min(dem))/(np.max(dem) - 
 plt.scatter(dem_scaled, dhdt_masked)
 plt.scatter(dem_scaled, dhdt_fit)
 plt.show()
+
+
+mb_misfits_filtered = []
+mb_misfits_original = []
+period = '2000-2020'
+use_generic_dem_heights = True
+fr = utils.get_rgi_region_file('08', version='62')
+gdf = gpd.read_file(fr)
+for RID in gdf.RGIId.to_list()[4:]:
+    Fill_Value = 9999.0
+    glaciers_Sweden = get_RIDs_Sweden()
+    RIDs_Sweden = glaciers_Sweden.RGIId
+    if RID in RIDs_Sweden.tolist():
+        continue
+    input_dir = '/home/thomas/regional_inversion/input_data/'
+    output_dir = '/home/thomas/regional_inversion/output/' + RID
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    input_file = output_dir + '/input.nc'
+    RGI_region = RID.split('-')[1].split('.')[0]
+    per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
+    dem_Norway = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Norway', per_glacier_dir, 'dem.tif'))
+    dem_Sweden = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Sweden', per_glacier_dir, 'dem.tif'))
+    # choose the DEM which contains no nans
+    if not (dem_Sweden.data == dem_Sweden._FillValue).any():
+            dem = deepcopy(dem_Sweden)
+            print('Choosing Swedish DEM')
+    elif not (dem_Norway.data == dem_Norway._FillValue).any():
+            print('Choosing Norwegian DEM')
+            dem = deepcopy(dem_Norway)
+    elif (dem_Norway.data == dem_Norway._FillValue).any() and (dem_Sweden.data == dem_Sweden._FillValue).any():
+        raise ValueError('No suitable DEM found, cannot proceed')
+
+    dhdt = rioxr.open_rasterio(os.path.join(input_dir, 'dhdt_' + period, per_glacier_dir, 'dem.tif')) * 0.85 #convert from m/yr to m.w.eq.
+    dhdt = dhdt.rio.write_nodata(Fill_Value)
+    dhdt.data[0][abs(dhdt.data[0])>1e3] = dhdt.rio.nodata
+    dhdt = dhdt.rio.interpolate_na()
+    
+    dem = dem.rio.reproject_match(dhdt)
+
+    if RID in RIDs_Sweden.tolist():
+        mask = load_georeferenced_mask(RID)
+        mask = mask.rio.set_attrs({'nodata': 0})
+        mask = mask.rio.reproject_match(dhdt)
+    else:
+        mask = rioxr.open_rasterio(os.path.join(input_dir, 'masks', per_glacier_dir, RID + '_mask.tif'))
+        mask = mask.rio.set_attrs({'nodata': 0})
+        mask = mask.rio.reproject_match(dhdt)
+
+    mb, heights = get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=use_generic_dem_heights)
+    mb_misfits_original.append(np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt.data[0][mask.data[0]==1]))
+    dhdt.data[0][mask.data[0] == 0] = np.nan
+    dhdt.data[0] = gauss_filter(dhdt.data[0], 1, 3)
+    dhdt.data[0][mask.data[0] == 0] = 0
+    mb_misfits_filtered.append(np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt.data[0][mask.data[0]==1]))
+
+mb_misfits_filtered = np.array(mb_misfits_filtered)
+mb_misfits_original = np.array(mb_misfits_original)

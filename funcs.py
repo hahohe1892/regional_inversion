@@ -9,10 +9,10 @@ from scipy import ndimage
 from celluloid import Camera
 import subprocess
 import matplotlib.pyplot as plt
-import PISM
+#import PISM
 import os.path
 
-ctx = PISM.Context()
+#ctx = PISM.Context()
 
 def identify_neighbors(n,m, nan_list, talks_to):
     nan_count = np.shape(nan_list)[0]
@@ -483,3 +483,16 @@ def movieqs(extra, step=1, file_name = 'animation.mp4', **kwargs):
 
 def normalize(x):
     return (x-np.nanmin(x))/(np.nanmax(x) - np.nanmin(x))
+
+def do_kdtree(new_bed, mask, buffer):
+    remove_ind = (buffer.numpy() == 1).flatten() + (mask.numpy() == 0).flatten()
+    x,y = np.meshgrid(range(new_bed.shape[1]), range(new_bed.shape[0]))
+    xy_arr = np.dstack([x.flatten(), y.flatten()])[0]
+    xy_arr = xy_arr[~remove_ind]
+    points = np.flip(np.array(np.where(buffer.numpy() == 1)), axis = 0).transpose()
+    mytree = scipy.spatial.cKDTree(xy_arr)
+    dist, indexes = mytree.query(points)
+    xy_ind = xy_arr[indexes]
+    bed_values = [new_bed[i[1], i[0]] for i in xy_ind]
+    new_bed[buffer.numpy() == 1] = bed_values
+    return new_bed

@@ -6,6 +6,7 @@ import shutil
 from load_input import *
 import datetime
 import time
+import subprocess
 
 def nc_out(RID, field, i=-1, file = 'output.nc', file_not_standard_dims = False, flip = False):
     dem = load_dem_path(RID)
@@ -102,3 +103,43 @@ def raw_mask_out_to_Win(field = 'mask', file = 'gridded_data.nc'):
         dem.rio.to_raster(path_out)
         shutil.copy(path_out, '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/08_rgi60_Scandinavia/raw_masks/mask_' + RID + '.tif')
 
+
+def retrieve_from_HPC(glaciers, file = 'ex.nc', date = '01/01/01/1970'):
+    for glacier in glaciers:
+        remote_path = '/mimer/NOBACKUP/groups/snic2022-22-55/regional_inversion/output/{}/{}'.format(glacier, file)
+        date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
+        try:
+            file_time = int(subprocess.check_output(['ssh', 'alvis2', 'stat -c %Y', remote_path]).strip())
+        except(subprocess.CalledProcessError):
+            continue
+        if file_time > date_unix:
+            print(glacier)
+            subprocess.call(['scp', 'alvis2:' + remote_path, '/home/thomas/regional_inversion/output/{}/'.format(glacier)])
+
+
+def get_mosaic_reference(RID):
+    mosaic_reference = '/home/thomas/regional_inversion/output/{}/mosaic_reference.txt'.format(RID)
+    file_content = []
+    with open(mosaic_reference, 'r') as fp:
+            for item in fp:
+                file_content.append(item)
+    return file_content[-1]
+
+
+def copy_all_ex_to_Win(date = '01/01/01/1970'):
+    RGI_region = '08'
+    fr = utils.get_rgi_region_file(RGI_region, version='62')
+    gdf = gpd.read_file(fr)
+    RIDs = gdf.RGIId.to_list()[4:]
+    
+    for RID in RIDs:
+        try:
+            path = '/home/thomas/regional_inversion/output/' + RID + '/ex.nc'
+            date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
+            file_time = os.path.getmtime(path)
+            if file_time > date_unix:
+                shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/ex.nc', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_ex.nc')
+                print(RID + ' done')
+        except FileNotFoundError:
+            print('ex.nc does not exist for glacier {}'.format(RID))
+            continue
