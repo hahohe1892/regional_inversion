@@ -3,3 +3,12 @@
 __pycache__/
 input_data/
 output/
+*.mp4
+*.pdf*
+*.sh~
+*igm/
+*#
+*.tif
+*.tfw
+*.tif.aux.xml
+*.tif.ovr
