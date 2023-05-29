@@ -75,9 +75,9 @@ for i in range(1):
             "-o": working_dir + "/output.nc",
             "-output.timeseries.times": 1,
             "-output.timeseries.filename": working_dir + "/timeseries.nc",
-            "-output.extra.times": .5,
+            "-output.extra.times": .05,
             "-output.extra.file": working_dir + "/extra.nc",
-            "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,climatic_mass_balance,rank,uvel,vvel",
+            "-output.extra.vars": "diffusivity,thk,topg,usurf,velsurf_mag,mask,taub_mag,taud_mag,velbar_mag,flux_mag,velbase_mag,climatic_mass_balance,rank,velsurf",
             "-sea_level.constant.value": -10000,
             "-time_stepping.assume_bed_elevation_changed": "true"
             }
@@ -136,22 +136,24 @@ for i in range(1):
         mask[mask>=0.5] = 1
         mask[mask<0.5] = 0
         S_rec = read_variable(pism.grid(), input_file, 'usurf', 'm')
+        #S_rec = ndimage.convolve(S_rec, np.ones((10,10)))/100
         B_rec = read_variable(pism.grid(), input_file, 'topg', 'm')
         if use_apparent_mb is True:
             smb = read_variable(pism.grid(), input_file, 'apparent_mass_balance', 'kg m-2 year-1')
         else:
             smb = read_variable(pism.grid(), input_file, 'climatic_mass_balance', 'kg m-2 year-1')
         #smb = np.zeros_like(mask)
-        tauc = np.ones_like(mask)*5e5
+        tauc = np.ones_like(mask)*5e5#7e4
 
         if use_apparent_mb is True:
             dh_ref *= 0
         # set inversion paramters
-        dt = .1
-        beta = .25
-        theta = 0.075
+        dt = .01
+        beta_0 = .25
+        #beta = .25
+        theta = 0.1
         bw = 1
-        pmax = 1000
+        pmax = 100
         p_friction = 1000
         max_steps_PISM = 25
         res = dem.rio.resolution()[0]
@@ -167,10 +169,10 @@ for i in range(1):
         data = np.copy(mask)
         buffer_mask = np.copy(mask)
         mask_b = create_buffer(data, buffer_mask,3)
-        mask = np.maximum(mask, mask_b)
+        #mask = np.maximum(mask, mask_b)
 
         slope = np.rad2deg(np.arctan(calc_slope(S_rec, res)))
-        mask[slope > 30] = 0
+        #mask[slope > 30] = 0
         slope_change = calc_slope(calc_slope(calc_slope(S_rec, res), res), res)
         slope_change_new = np.gradient(calc_slope(calc_slope(S_rec, res), res))
         slope_change_new = np.sqrt(slope_change_new[0]**2+ slope_change_new[1]**2)*np.sign(np.maximum(slope_change_new[0], slope_change_new[1]))
@@ -190,7 +192,7 @@ for i in range(1):
 
         aoi = np.logical_and(slope_change**4>10e-20, criterion == 1)
         aoi_new = np.logical_and(slope_change_new**2>1e-7, criterion == 1)
-        mask -=aoi
+        #mask -=aoi
 
         ### establish buffer lift up sides ###
         bw_s = 20
@@ -227,7 +229,7 @@ for i in range(1):
         #S_rec[mask==0] = S_ref[mask==0]+50
         B_rec[mask==0] = S_rec[mask==0]
         B_rec = np.minimum(S_rec, B_rec)
-        B_rec[mask==1] = np.minimum(B_rec, B_rec - 50)[mask==1]
+        #B_rec[mask==1] = np.minimum(B_rec, B_rec - 50)[mask==1]
 
         '''
         ### start with tilted plane as surface ###
@@ -240,15 +242,23 @@ for i in range(1):
         # do the inversion
         B_rec = np.minimum(S_rec, B_rec)
         B_rec[mask==0] = S_rec[mask==0]-1e-5
-
-        h_old = S_rec - B_rec
+        '''
+        #h_old = (S_rec - B_rec)*0
         #h_old = h_old * mask
 
         # run PISM forward for dt years
+        #dt = 5
         #(h_rec, mask_iter, u_rec, v_rec, tauc_rec, h_old) = run_pism(pism, dt, B_rec, h_old, tauc)
-        '''
-        break
+        
+        #break
+        beta_update = 0
         for p in range(pmax):
+            if (p%1000) == 0:
+                theta /= 2
+                S_rec = S_rec + (S_rec - S_ref)
+                B_rec = np.minimum(S_rec, B_rec)
+            beta_update += 1
+            beta = ((-10*beta_0)/(beta_update+10)) + beta_0
             B_rec, S_rec, tauc_rec, misfit, taud = iteration(pism,
                                                        B_rec, S_rec, tauc, mask, dh_ref, np.zeros_like(dem), smb,
                                                        dt=dt,
@@ -267,7 +277,7 @@ for i in range(1):
             B_rec_all.append(np.copy(B_rec))
             S_rec_all.append(np.copy(S_rec))
             misfit_all.append(misfit)
-            tauc = taud*.8
+            #tauc = taud*.8
 
         pism.save_results()
         misfit_vs_iter = [np.mean(abs(x[mask == 1])) for x in misfit_all]

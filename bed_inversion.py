@@ -166,10 +166,13 @@ def iteration(model, bed, usurf, yield_stress, mask, dh_ref, vel_ref, smb, dt, b
 
     # calculate modelled dh/dt
     dh_rec = (h_rec - h_old)/dt
-
+    
     # calculate dh/dt misfit and shift it
     misfit = dh_rec - dh_ref
-    misfit = np.maximum(np.minimum(misfit, 5), -5)
+    #try based on surface misfit
+    #misfit = (bed + h_rec) - usurf
+
+    #misfit = np.maximum(np.minimum(misfit, 5), -5)
     #misfit = shift(misfit, u_rec, v_rec, mask, .3)
 
     # apply bed and surface corrections

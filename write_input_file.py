@@ -29,6 +29,7 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
     per_glacier_dir = 'per_glacier/RGI60-' + RGI_region + '/RGI60-' + RGI_region + '.0' + RID[10] + '/'+ RID
     dem_Norway = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Norway', per_glacier_dir, 'dem.tif'))
     dem_Sweden = rioxr.open_rasterio(os.path.join(input_dir, 'DEM_Sweden', per_glacier_dir, 'dem.tif'))
+    dem_oggm = rioxr.open_rasterio(os.path.join(input_dir, 'DEMs', per_glacier_dir, 'dem.tif'))
     # choose the DEM which contains no nans
     if not (dem_Sweden.data == dem_Sweden._FillValue).any():
             dem = deepcopy(dem_Sweden)
@@ -45,7 +46,8 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
     dhdt = dhdt.rio.interpolate_na()
 
     dem = dem.rio.reproject_match(dhdt)
-
+    dem_oggm = dem_oggm.rio.reproject_match(dhdt)
+    
     if RID in RIDs_Sweden.tolist():
         mask = load_georeferenced_mask(RID)
         mask = mask.rio.set_attrs({'nodata': 0})
@@ -71,6 +73,8 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
 
     dem.name = 'usurf'
     dem = dem.squeeze()
+    dem_oggm.name = 'usurf_oggm'
+    dem_oggm = dem_oggm.squeeze()
     mask.name = 'mask'
     mask = mask.squeeze()
     mask.astype('int')
@@ -88,7 +92,7 @@ def write_input_file_Sweden_Norway(RID, period = '2000-2020', use_generic_dem_he
     vel_Millan.name = 'velocity by Millan'
     vel_Millan = vel_Millan.squeeze()
 
-    all_xr = xr.merge([consensus_thk, dem, topg, mask, dhdt, mb, apparent_mb, vel_Millan])
+    all_xr = xr.merge([consensus_thk, dem, dem_oggm, topg, mask, dhdt, mb, apparent_mb, vel_Millan])
     all_xr.to_netcdf(input_file)
 
 

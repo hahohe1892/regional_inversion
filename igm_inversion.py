@@ -11,8 +11,8 @@ from sklearn.preprocessing import normalize
 
 
 #RID = 'RGI60-08.00213' # Storglaciären
-RID = 'RGI60-08.00188' # Rabots
-#RID = 'RGI60-08.00005' # Salajekna
+#RID = 'RGI60-08.00188' # Rabots
+RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
 #RID = 'RGI60-08.00121' # Mikkajekna
 #RID = 'RGI60-07.01475' # Droenbreen
@@ -29,19 +29,24 @@ for RID in RIDs_Sweden:
     dem = load_dem_path(RID)
     dem = crop_border_xarr(dem)
 
-    input_pism = rioxr.open_rasterio(input_file)
-    input_pism = input_pism.rio.write_crs(dem.rio.crs)
-    input_pism.mask.data = input_pism.mask.astype('int').data
-    input_igm = input_pism.rio.reproject(input_pism.rio.crs, resolution = (resolution,resolution), resampling = Resampling.bilinear)
-    input_igm.ice_surface_temp.data = np.ones_like(input_igm.ice_surface_temp)*273
-    input_igm = input_igm.squeeze()
-    #input_igm = input_igm.reindex(y=list(reversed(input_igm.y)))
-    for var in input_igm.data_vars:
-        input_igm.data_vars[var].data = input_igm.data_vars[var].rio.interpolate_na()
-
-    input_igm.to_netcdf(working_dir + '/input_igm.nc')
+    use_pism_input = False
+    if use_pism_input is True:
+        input_pism = rioxr.open_rasterio(input_file)
+        input_pism = input_pism.rio.write_crs(dem.rio.crs)
+        input_pism.mask.data = input_pism.mask.astype('int').data
+        input_igm = input_pism.rio.reproject(input_pism.rio.crs, resolution = (resolution,resolution), resampling = Resampling.bilinear)
+        input_igm.ice_surface_temp.data = np.ones_like(input_igm.ice_surface_temp)*273
+        input_igm = input_igm.squeeze()
+        #input_igm = input_igm.reindex(y=list(reversed(input_igm.y)))
+        for var in input_igm.data_vars:
+            input_igm.data_vars[var].data = input_igm.data_vars[var].rio.interpolate_na()
+        input_igm.to_netcdf(working_dir + '/input_igm.nc')
+    else:
+        input_igm = rioxr.open_rasterio(input_file)
+        input_igm = input_igm.squeeze()
 
     dummy_var = input_igm.usurf
+    dummy_var = dummy_var.rio.set_attrs({'_FillValue': np.nan})
 
     S_ref = deepcopy(input_igm.usurf.data)
     B_init = input_igm.topg.data
@@ -56,13 +61,12 @@ for RID in RIDs_Sweden:
         a_smb = deepcopy(smb) * 0.7
         a_smb += 163#232 
 
-
     mask = input_igm.mask.data
-    #S_ref[mask==0] = np.nan
+    S_ref[mask == 0] = np.nan
     S_ref = gauss_filter(S_ref,1, 3)
-    #S_ref[mask==0] = input_igm.usurf.data[mask==0]
+    S_ref[mask == 0] = input_igm.usurf.data[mask == 0]
     #S_ref[mask == 0] += 100
-    B_init[mask == 0] = S_ref[mask == 0]
+    B_init[mask == 0] = S_ref[mask == 0]+50
     B_init[mask == 1] = S_ref[mask == 1]
 
     dt = 1
@@ -70,8 +74,8 @@ for RID in RIDs_Sweden:
     beta = 1
     theta = 0.3
     bw = 0
-    p_save = 10
-    p_mb = -500 #iterations before end when mass balance is recalculated
+    p_save = 1
+    p_mb = -500  # iterations before end when mass balance is recalculated
 
     # establish buffer
     mask_iter = mask == 1
@@ -83,6 +87,14 @@ for RID in RIDs_Sweden:
         boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
         mask_bw[boundary] = 1
     buffer = ((mask_bw + mask_iter*1)-1)
+    #bw = 10
+    #mask_iter = mask == 1
+    #buffer = np.zeros_like(mask)
+    #k = np.ones((3,3),dtype=int)
+    #for i in range(bw):
+    #    boundary = nd.binary_dilation(mask_iter.data[0]==1, k) & (~mask_iter)
+    #    mask_iter.data[0][boundary.data[0]] = 1
+
     #buffer *= (a_smb<0)
 
     B_rec_all = []
@@ -93,10 +105,14 @@ for RID in RIDs_Sweden:
     glacier.config.tsave = dt * 10
     glacier.config.cfl = 0.3
     glacier.config.init_slidingco = 6
-    glacier.config.init_arrhenius = 78 #78
+    glacier.config.init_arrhenius = 78
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf'])
-    glacier.config.geology_file = working_dir + '/input_igm.nc'
+    glacier.config.verbosity = 0
+    if use_pism_input is True:
+        glacier.config.geology_file = working_dir + '/input_igm.nc'
+    else:
+        glacier.config.geology_file = working_dir + '/input.nc'
     glacier.config.iceflow_model_lib_path = '/home/thomas/regional_inversion/igm/f15_cfsflow_GJ_22_a/{}'.format(resolution)
     glacier.initialize()
     with tf.device(glacier.device_name):
@@ -104,7 +120,10 @@ for RID in RIDs_Sweden:
         glacier.initialize_fields()
 
         glacier.icemask.assign(mask)
-        glacier.smb.assign((0.0 + a_smb/900) * glacier.icemask)
+        if use_pism_input is True:
+            glacier.smb.assign((0.0 + a_smb/900) * glacier.icemask)
+        else:
+            glacier.smb.assign((0.0 + a_smb) * glacier.icemask)
         glacier.topg.assign(B_init)
         glacier.usurf.assign(S_ref)
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)#np.zeros_like(glacier.topg))
@@ -112,7 +131,7 @@ for RID in RIDs_Sweden:
         left_sum = []
         s_refresh = 50000
         while p < pmax:
-            if p > 0 and p%s_refresh == 0:
+            if p > 0 and p % s_refresh == 0:
                 glacier.usurf.assign(S_ref)
                 theta *= 3
             S_old = glacier.usurf.numpy()
@@ -128,15 +147,15 @@ for RID in RIDs_Sweden:
 
             dhdt = (glacier.usurf - S_old)/dt
 
-            misfit = (dhdt) #+ (S_ref - S_old) # - dh_ref)
+            misfit = dhdt.numpy() #+ (S_ref - S_old) # - dh_ref)
             left_sum.append(np.sum(dhdt*(-mask+1)))
             # update surface
-            S_old[mask == 1] = S_old[mask == 1] + theta * beta * misfit.numpy()[mask == 1] #*(normalize(calc_slope(glacier.thk.numpy()*mask, resolution).reshape(-1,1), axis = 0, norm = 'max').reshape(S_ref.shape))[mask==1]
+            S_old[mask == 1] = S_old[mask == 1] + theta * beta * misfit[mask == 1] #*(normalize(calc_slope(glacier.thk.numpy()*mask, resolution).reshape(-1,1), axis = 0, norm = 'max').reshape(S_ref.shape))[mask==1]
             #(1-normalize(glacier.thk.numpy().reshape(-1,1), axis = 0, norm = 'max').reshape(S_ref.shape))[mask==1]
             glacier.usurf.assign(S_old)
 
             # update bed and thickness
-            new_bed = glacier.topg.numpy() - beta * misfit.numpy()
+            new_bed = glacier.topg.numpy() - beta * misfit
             new_bed[mask == 0] = B_init[mask == 0]
             bed_before_buffer = deepcopy(new_bed)
             new_bed[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
@@ -144,13 +163,15 @@ for RID in RIDs_Sweden:
             #new_thk[mask == 0] = 0
             #new_thk[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
 
-            dummy_var.data = new_bed
-            dummy_var = dummy_var.rio.interpolate_na(method = 'cubic')
+            #dummy_var.data = new_bed
+
+            ## the below is causing issues, not sure why. Needs fixing if buffer should be used!
+            #dummy_var = dummy_var.rio.interpolate_na(method = 'cubic')
 
             #new_thk = dummy_var.data
-            new_bed = dummy_var.data
-            left_sum[-1] += np.sum(new_bed - bed_before_buffer)
-            left_sum[-1] += np.sum(np.maximum(new_bed - glacier.usurf, 0))
+            #new_bed = dummy_var.data
+            #left_sum[-1] += np.sum(new_bed - bed_before_buffer)
+            #left_sum[-1] += np.sum(np.maximum(new_bed - glacier.usurf, 0))
             new_bed = np.minimum(glacier.usurf, new_bed)
 
             if p == (pmax - p_mb):
@@ -174,7 +195,7 @@ for RID in RIDs_Sweden:
             misfit_all.append(misfit)
 
             # prepare next iteration
-            p+=1
+            p += 1
             glacier.config.tend = p*dt+dt
             glacier.config.tstart = p*dt
             del glacier.already_called_update_t_dt

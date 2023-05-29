@@ -13,9 +13,13 @@ from shapely.ops import unary_union
 from get_input import *
 from sklearn.linear_model import LinearRegression
 import pwlf
+from pathlib import Path
 
 #RID = 'RGI60-08.00005'
 glacier_dir = '/home/thomas/regional_inversion/input_data/'
+home_dir = '/home/thomas/'
+#home_dir = '\\\\wsl.localhost\\Ubuntu-20.04\\home\\thomas'
+
 #period = '2000-2020'
 
 
@@ -85,7 +89,7 @@ def load_thk_path(RID):
 
 
 def in_field(RID, field):
-    path = '/home/thomas/regional_inversion/output/' + RID + '/input.nc'
+    path = home_dir + '/regional_inversion/output/' + RID + '/input.nc'
     data = get_nc_data(path, field, ':')
 
     return data
@@ -273,23 +277,37 @@ def nearby_glacier(RID, RGI, buffer_width):
     old_len = 0
     checked_RIDs = []
     new_RIDs = deepcopy(area_RIDs)
+    intersection_polys_union = deepcopy(intersection_polys)
     while len(new_RIDs) > 0:
         old_len = len(new_RIDs)
         print(old_len)
         new_area_RIDs = []
+        new_area_polys = gpd.geoseries.GeoSeries()
+        new_area_bounds = pd.DataFrame()
         for area_RID in new_RIDs:
             neighbor_RIDs, neighbor_polys, neighbor_bounds = neighboring_glacier(area_RID, RGI, 200)
             new_area_RIDs.extend(neighbor_RIDs)
-            intersection_polys = intersection_polys.append(neighbor_polys)
-            bounds = pd.concat([bounds, neighbor_bounds])
+            intersection_polys_union = intersection_polys_union.append(neighbor_polys)
+            new_area_polys = new_area_polys.append(neighbor_polys)
+            #bounds = pd.concat([bounds, neighbor_bounds])
+            new_area_bounds = pd.concat([new_area_bounds, neighbor_bounds])
             checked_RIDs.append(area_RID)
         new_RIDs = [x for x in new_area_RIDs if x not in checked_RIDs]
+        new_polys = [np.array(new_area_polys)[np.where(np.array(new_area_RIDs) == x)] for x in new_area_RIDs if x not in checked_RIDs]
+        new_bounds = [np.array(new_area_bounds)[np.where(np.array(new_area_RIDs) == x)[0][0]] for x in new_area_RIDs if x not in checked_RIDs]
         new_RIDs = np.unique(new_RIDs).tolist()
+        new_polys = [new_polys[np.where(np.array(new_RIDs) == x)[0][0]] for x in np.unique(new_RIDs)]
+        new_bounds = [new_bounds[np.where(np.array(new_RIDs) == x)[0][0]] for x in np.unique(new_RIDs)]
+        if (len(new_polys) != len(new_RIDs)) or (len(new_polys) != len(new_bounds)):
+            break
         area_RIDs.extend(new_RIDs)
-    return area_RIDs, intersection_polys, bounds
+        for new_poly in new_polys:
+            intersection_polys = intersection_polys.append(gpd.geoseries.GeoSeries(new_poly[0]), ignore_index = True)
+        bounds = pd.concat([bounds, pd.DataFrame(new_bounds, columns = ['minx', 'miny', 'maxx', 'maxy'])], ignore_index = True)
+    return area_RIDs, intersection_polys, bounds, intersection_polys_union
 
 
-def obtain_area_mosaic(RID):
+def obtain_area_mosaic(RID, buffer_width = 200, max_n_glaciers = 1e3, discard_list = []):
     '''
     searches for nearby (within 200 m buffer) glaciers based on RGI polygons,
     extracts their RID, bounds and the overlap between the buffer and the nearby glaciers.
@@ -298,7 +316,7 @@ def obtain_area_mosaic(RID):
     This procedure can leave holes at glacier boundaries due to rasterization.
     Identifies these holes based on overlap.
     '''
-    working_dir = '/home/thomas/regional_inversion/output/' + RID
+    working_dir = home_dir + '/regional_inversion/output/' + RID
     input_file = working_dir + '/input.nc'
     Fill_Value = 9999.0
 
@@ -314,16 +332,29 @@ def obtain_area_mosaic(RID):
     fr = utils.get_rgi_region_file(RGI_region, version='62')
     gdf = gpd.read_file(fr)
     gdf = gdf.to_crs(input_igm.rio.crs)#gdf.crs.from_epsg('32632'))
-    area_RIDs, area_polys, bounds = nearby_glacier(RID, gdf, 200)
-    min_x, min_y = bounds.min()['minx']-1000, bounds.min()['miny']-1000 # add 1000 m to bounds as extra padding
-    max_x, max_y = bounds.max()['maxx']+1000, bounds.max()['maxy']+1000
+    area_RIDs, area_polys, bounds, area_polys_union = nearby_glacier(RID, gdf, buffer_width)
+    area_polys = area_polys.reset_index()
+    bounds = bounds.reset_index()
+    already_done_inds = [np.where(np.array(area_RIDs) == x)[0][0] for x in area_RIDs if x in discard_list]
+    already_done_inds = sorted(already_done_inds, reverse = True)
+    for index in already_done_inds:
+        area_RIDs.pop(index)
+        area_polys = area_polys.drop(index)
+        bounds = bounds.drop(index)
+    area_RIDs = area_RIDs[:max_n_glaciers]
+    area_polys = area_polys[:max_n_glaciers]
+    bounds = bounds[:max_n_glaciers]
+    #min_x, min_y = bounds.min()['minx']-1000, bounds.min()['miny']-1000 # add 1000 m to bounds as extra padding
+    #max_x, max_y = bounds.max()['maxx']+1000, bounds.max()['maxy']+1000
+    min_x, min_y = gdf[gdf.RGIId.isin(area_RIDs)].geometry.total_bounds[:2] - 1000 # add 1000 m to bounds as extra padding
+    max_x, max_y = gdf[gdf.RGIId.isin(area_RIDs)].geometry.total_bounds[2:] + 1000
     input_igm = input_igm.rio.pad_box(min_x, min_y, max_x, max_y)
     mosaic_list = [input_igm]
     i = 2
     for glacier in area_RIDs:
         if glacier == RID:
             continue
-        glacier_dir = '/home/thomas/regional_inversion/output/' + glacier
+        glacier_dir = home_dir + '/regional_inversion/output/' + glacier
         input_file = glacier_dir + '/input.nc'
         input = rioxr.open_rasterio(input_file)
         input.attrs['_FillValue'] = Fill_Value
@@ -331,7 +362,7 @@ def obtain_area_mosaic(RID):
         i+=1
         for var in input.data_vars:
             input.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
-            if var != 'usurf':
+            if var not in ['usurf', 'usurf_oggm']:
                 input.data_vars[var].values = input.data_vars[var].where(input.mask == 1)
         input = input.fillna(Fill_Value)
         # using reproject as below somehow didn't work (creates displacement between orignal glacier and mosaic), not sure why
@@ -342,13 +373,13 @@ def obtain_area_mosaic(RID):
     mosaic = mosaic.where(mosaic != Fill_Value)
     # to find gaps between glaciers, create new mask mosaic based on polygons
     # and take difference to mosaic mask created above
-    area_polys = area_polys[area_polys != None]
-    if len(area_polys) == 0:
+    area_polys_union = area_polys_union[area_polys_union != None]
+    if len(area_polys_union) == 0:
         internal_boundaries = None
     else:
-        union = gpd.GeoSeries(unary_union(area_polys))
+        union = gpd.GeoSeries(unary_union(area_polys_union))
         out_path = os.path.join(working_dir, 'intersection_mask.tif')
-        raster_union_out = mask_from_polygon(union[0], area_polys, out_path = out_path)
+        raster_union_out = mask_from_polygon(union[0], area_polys_union, out_path = out_path)
         raster_union = rioxr.open_rasterio(out_path)
         raster_union = raster_union.rio.write_nodata(0)
         raster_union = raster_union.rio.reproject_match(mosaic, all_touched = True)
@@ -544,7 +575,7 @@ def resolve_mb_dhdt_smoothing(RID, dhdt, dem, mask, use_generic_dem_heights=True
 
 def resolve_mb_dhdt_piecewise_linear(RID, dhdt, dem, mask, use_generic_dem_heights=True, modify_dhdt_or_smb='smb'):
     mb, heights = get_mb_Rounce(RID, dem, mask, use_generic_dem_heights=use_generic_dem_heights)
-    if np.isnan(heights[0]).all():
+    if np.isnan(heights[0]).all(): # for very small glaciers (1 pixel), there sometimes is no mass balance
         apparent_mb_fit = np.zeros_like(dem.data[0])[mask.data[0] == 1]
     else:
         mb_misfit = np.mean(mb.data[0][mask.data[0]==1]) - np.mean(dhdt.data[0][mask.data[0]==1])
@@ -559,6 +590,13 @@ def resolve_mb_dhdt_piecewise_linear(RID, dhdt, dem, mask, use_generic_dem_heigh
         res = my_pwlf.fit(2)
         apparent_mb_fit = np.zeros_like(apparent_mb.data[0])
         apparent_mb_fit[mask.data[0] == 1] = my_pwlf.predict(dem.data[0][mask.data[0] == 1])
+
+        # The fit above produces a knick-point wherever it matches the data best,
+        # but we want the knick point at the ELA.
+        # Therefore, take the previous fit, determine where the ELA is according to it,
+        # and then calculate a new fit where the knick-point is forced to be at the ELA.
+        # Do this iteratively to ensure convergence.
+
         for i in range(5):
             ELA_ind = np.where(abs(apparent_mb_fit[mask.data[0] == 1])==np.min(abs(apparent_mb_fit[mask.data[0] == 1])))
             ELA = dem.data[0][mask.data[0] == 1][ELA_ind[0][0]]
@@ -574,7 +612,7 @@ def resolve_mb_dhdt_piecewise_linear(RID, dhdt, dem, mask, use_generic_dem_heigh
         
 def write_path_to_mosaic(RID, area_RIDs):
     for area_RID in area_RIDs:
-        working_dir = os.path.join('/home/thomas/regional_inversion/output/', area_RID)
+        working_dir = os.path.join(home_dir + '/regional_inversion/output/', area_RID)
         with open(os.path.join(working_dir, 'mosaic_reference.txt'), 'w') as fp:
             fp.write('This glacier is part of a larger glaciated area,\nand the results therefore can be found under the following RGI ID:\n{}'.format(RID))
             
