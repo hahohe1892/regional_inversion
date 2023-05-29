@@ -12,3 +12,4 @@ output/
 *.tfw
 *.tif.aux.xml
 *.tif.ovr
+*.npy
