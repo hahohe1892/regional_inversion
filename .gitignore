@@ -13,3 +13,4 @@ output/
 *.tif.aux.xml
 *.tif.ovr
 *.npy
+src/clean.sh

@@ -26,8 +26,8 @@ from pathlib import Path
 #RID = 'RGI60-08.01657' # Svartisen
 #RID = 'RGI60-08.01779' # Hardangerjökulen
 #RID = 'RGI60-08.02666' # Aalfotbreen
-#RID = 'RGI60-08.01258' # Langfjordjökulen
-RID = 'RGI60-08.02382' # Rundvassbreen
+RID = 'RGI60-08.01258' # Langfjordjökulen
+#RID = 'RGI60-08.02382' # Rundvassbreen
 #RID = 'RGI60-08.00966' # Vestre Memurubreen
 #RID = 'RGI60-08.00987' # Graasubreen
 #RID = 'RGI60-08.00312' # Storbreen
@@ -127,13 +127,18 @@ for RID in [RID]:
 
     A_tilde = np.zeros_like(mask) + 30
     vel_smooth = gauss_filter(vel_ref, 2, 4)
-    q25 = np.quantile(vel_smooth[mask == 1], .05)
-    q75 = np.quantile(vel_smooth[mask == 1], .95)
-    A_tilde[np.logical_and(mask == 1, vel_smooth <= q25)] = 30
-    A_tilde[np.logical_and(mask == 1, vel_smooth >= q75)] = 84
-    A_tilde[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))] = normalize(vel_smooth[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))]) * 54 + 30
-    A = np.where(A_tilde <= 78, A_tilde, 78)
-    c = np.where(A_tilde <= 78, 0, A_tilde - 78)
+    
+    if (vel_smooth == 0).all(): # velocity not available for all glaciers
+        A = np.ones_like(A_tilde) * 60
+        c = np.zeros_like(A_tilde)
+    else:
+        q25 = np.quantile(vel_smooth[mask == 1], .05)
+        q75 = np.quantile(vel_smooth[mask == 1], .95)
+        A_tilde[np.logical_and(mask == 1, vel_smooth <= q25)] = 30
+        A_tilde[np.logical_and(mask == 1, vel_smooth >= q75)] = 84
+        A_tilde[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))] = normalize(vel_smooth[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))]) * 54 + 30
+        A = np.where(A_tilde <= 78, A_tilde, 78)
+        c = np.where(A_tilde <= 78, 0, A_tilde - 78)
 
     dt = 1
     pmax = 5000
