@@ -40,7 +40,7 @@ RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08
 
 if os.getcwd() == '/home/thomas/regional_inversion/src':
     home_dir = Path('/home/thomas')
-    model_dir = home_dir / 'src/igm'
+    model_dir = home_dir / 'regional_inversion/src/igm'
 else:
     home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
     model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
