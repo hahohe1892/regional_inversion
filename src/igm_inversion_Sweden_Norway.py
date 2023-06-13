@@ -36,6 +36,8 @@ RID = 'RGI60-08.01258' # Langfjordjökulen
 #RID = 'RGI60-08.01103' # Boeyabreen
 #RID = 'RGI60-08.00435' # Folgefonna
 
+# this is simply a test to see whether GitHub on Alvis works
+
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
 
 if os.getcwd() == '/home/thomas/regional_inversion/src':
