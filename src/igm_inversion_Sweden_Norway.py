@@ -14,6 +14,7 @@ from sklearn.linear_model import LinearRegression
 from geocube.api.core import make_geocube
 import sys
 from pathlib import Path
+from tensorflow.python.client import device_lib
 
 #RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00188' # Rabots
@@ -37,8 +38,13 @@ RID = 'RGI60-08.01258' # Langfjordjökulen
 
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
 
-home_dir = Path('/home/thomas')
-#home_dir = Path('//wsl.localhost/Ubuntu-20.04/home/thomas')
+if os.getcwd() == '/home/thomas/regional_inversion/src':
+    home_dir = Path('/home/thomas')
+    model_dir = home_dir / 'src/igm'
+else:
+    home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
+    model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
+
 override_inputs = False
 check_in_session = True # if this is false, global checking is activated
 override_global = False
@@ -148,6 +154,12 @@ for RID in [RID]:
     p_save = 500
     p_mb = 1100  # iterations before end when mass balance is recalculated
     s_refresh = 550
+
+    if RID in 'RGI60-08.00434' in area_RIDs:
+        pmax = 12000
+        p_mb = 4400
+        s_refresh = 1200
+        beta_0 = 1
     
     # establish buffer
     mask_iter = mask == 1
@@ -177,7 +189,7 @@ for RID in [RID]:
     glacier.config.verbosity = 0
     glacier.config.geology_file = working_dir / 'igm_input.nc'
     #glacier.config.iceflow_model_lib_path = home_dir / 'regional_inversion/igm/f17_pismbp_GJ_22_a/{}'.format(resolution)
-    glacier.config.iceflow_model_lib_path = home_dir / 'regional_inversion/src/igm/f15_cfsflow_GJ_22_a/{}'.format(resolution)
+    glacier.config.iceflow_model_lib_path = model_dir / 'f15_cfsflow_GJ_22_a/{}'.format(resolution)
     glacier.config.usegpu = True
     glacier.initialize()
     with tf.device(glacier.device_name):
