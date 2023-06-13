@@ -6,7 +6,6 @@ output/
 *.mp4
 *.pdf*
 *.sh~
-*igm/
 *#
 *.tif
 *.tfw

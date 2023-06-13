@@ -1,0 +1,185 @@
+<html>
+  <body>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+      <div class="mermaid">
+    
+        classDiagram
+          class Igm {
+            PAD : list
+            U
+            V
+            W
+            X
+            Y
+            already_called_smoothing_thk : bool
+            already_called_update_climate : bool
+            already_called_update_iceflow : bool
+            already_called_update_icethickness : bool
+            already_called_update_ncdf_ex : bool
+            already_called_update_ncdf_ts : bool
+            already_called_update_plot : bool
+            already_called_update_smb : bool
+            already_called_update_t_dt : bool
+            already_called_update_topg : bool
+            already_called_update_tracking : bool
+            already_called_update_write_trajectories : bool
+            arrhenius
+            ax
+            cbar
+            config
+            costs : list
+            dX
+            ddz
+            depth
+            device_name
+            divflux
+            divfluxobs
+            dt : float
+            dt_target : float
+            dtopgdt
+            dx
+            dz
+            ela : interp1d
+            extent : list
+            fig
+            flowdirx : ndarray, NoneType
+            flowdiry : ndarray, NoneType
+            gradabl : interp1d
+            gradacc : interp1d
+            gridseed
+            height
+            iceflow_fieldbounds : dict
+            iceflow_mapping : dict
+            iceflow_model : NoneType
+            icemask
+            ip
+            it : int
+            itime_write_trajectories : int
+            itsave : int
+            jiptprof
+            mask
+            maxacc : interp1d
+            meanprec
+            meantemp
+            nrhpos
+            nwpos
+            nxpos
+            nypos
+            nz
+            nzpos
+            parser : ArgumentParser
+            profile : ndarray
+            rhpos
+            rmsdiv : list
+            rmsthk : list
+            rmsusurf : list
+            rmsvel : list
+            saveresult : bool
+            slidingco
+            slopsurfx
+            slopsurfy
+            smb_fieldbounds : dict
+            smb_mapping : dict
+            smb_model : NoneType
+            stddiv : list
+            stdthk : list
+            stdusurf : list
+            stdvel : list
+            strflowctrl
+            t
+            tcomp : dict
+            thk
+            thktargetprof
+            thktargetprof_std
+            tlast_clim : float
+            tlast_erosion
+            tlast_mb : float
+            tlast_seeding : float
+            tlast_smoothing_thk : float
+            tlast_uplift
+            topg
+            tsave : list
+            usurf
+            uvelsurfobs
+            var_info : dict
+            velbar_mag
+            velbase_mag
+            velsurf_mag
+            velsurfobs
+            velsurfobs_mag
+            vvelsurfobs
+            weight_particles : object
+            wpos
+            wvelbase
+            wvelsurf
+            xpos
+            ypos
+            zpos
+            animate_result(file, vari, save)
+            compute_divflux(u, v, h, dx, dy)
+            compute_flow_direction_for_anisotropic_smoothing()
+            compute_gradient_tf(s, dx, dy)
+            compute_rms_std_optimization(i)
+            getmag(u, v)
+            init_3dvel()
+            init_smb_nn()
+            init_smb_simple()
+            initialize()
+            initialize_fields()
+            initialize_iceflow()
+            load_ncdf_data(filename)
+            load_thk_profiles()
+            make_data_holes()
+            optimize()
+            output_ncdf_optimize_final()
+            plot_computational_pie()
+            plot_cost_functions(costs, plot_live)
+            plot_opti_diff(file, vari, plot_live)
+            print_all_comp_info()
+            print_comp_info_live()
+            print_info()
+            read_config_param()
+            read_config_param_3dvel()
+            read_config_param_climate()
+            read_config_param_erosion()
+            read_config_param_iceflow()
+            read_config_param_optimize()
+            read_config_param_output_ncdf()
+            read_config_param_plot()
+            read_config_param_smb()
+            read_config_param_smoothing_thk()
+            read_config_param_t_dt()
+            read_config_param_tracking()
+            read_fields_and_bounds(path)
+            restart()
+            run()
+            run_opti()
+            seeding_particles()
+            stop()
+            update_3dvel()
+            update_climate()
+            update_iceflow()
+            update_ncdf_3d_ex()
+            update_ncdf_ex()
+            update_ncdf_optimize(it)
+            update_ncdf_ts()
+            update_particles()
+            update_plot()
+            update_plot_inversion(i, plot_live)
+            update_plot_profiles(i, plot_live)
+            update_reconstruct_3dvel_tf()
+            update_smb()
+            update_smb_nn()
+            update_smb_simple()
+            update_smoothing_thk()
+            update_t_dt()
+            update_thk()
+            update_topg()
+            update_vert_disc_tf()
+            update_write_trajectories()
+            whatsize(n)
+          }
+  
+       </div>
+  </body>
+</html>
