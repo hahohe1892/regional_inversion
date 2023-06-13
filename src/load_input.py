@@ -15,13 +15,12 @@ from sklearn.linear_model import LinearRegression
 import pwlf
 from pathlib import Path
 
-#RID = 'RGI60-08.00005'
-glacier_dir = '/home/thomas/regional_inversion/input_data/'
-home_dir = '/home/thomas/'
-#home_dir = '\\\\wsl.localhost\\Ubuntu-20.04\\home\\thomas'
-
-#period = '2000-2020'
-
+if os.getcwd() == '/home/thomas/regional_inversion/src':
+    glacier_dir = '/home/thomas/regional_inversion/input_data/'
+    home_dir = '/home/thomas/'
+else:
+    glacier_dir = '/mimer/NOBACKUP/groups/snic2022-22-55/regional_inversion/input_data/'
+    home_dir = '/mimer/NOBACKUP/groups/snic2022-22-55/'
 
 def load_dhdt_path(RID, period):
     RGI_region = RID.split('-')[1].split('.')[0]
