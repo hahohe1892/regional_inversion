@@ -45,7 +45,7 @@ else:
     home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
     model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
 
-override_inputs = False
+override_inputs = True
 check_in_session = True # if this is false, global checking is activated
 override_global = False
 if check_in_session is False: # in that case, we check if this glacier should be modelled in check_file
@@ -313,6 +313,7 @@ for RID in [RID]:
     buffer = ((mask_bw + tf.cast(mask_iter, tf.int8))-1)
 
     # interpolate around ice margin
+    dummy_var = deepcopy(input_igm.usurf)
     dummy_var.data = glacier.thk.numpy()
     dummy_var.data[np.where(buffer == 1)] = dummy_var.attrs['_FillValue']
     dummy_var = dummy_var.rio.interpolate_na(method = 'linear')
