@@ -19,8 +19,8 @@ RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08
 
 
 for RID_obs in RIDs_with_obs[:4]:
-    #RID = get_mosaic_reference(RID_obs)
-    working_dir = home_dir / 'regional_inversion/output/' / RID_obs
+    RID = get_mosaic_reference(RID_obs)
+    working_dir = home_dir / 'regional_inversion/output/' / RID
     input_file = working_dir / 'igm_input.nc'
     input_igm = rioxr.open_rasterio(input_file)
     for var in input_igm.data_vars:
