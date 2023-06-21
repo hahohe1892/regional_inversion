@@ -24,10 +24,10 @@ from tensorflow.python.client import device_lib
 #RID = 'RGI60-07.01475' # Droenbreen
 #RID = 'RGI60-07.00389' # Bergmesterbreen
 #RID = 'RGI60-08.00434' # Tunsbergdalsbreen
-#RID = 'RGI60-08.01657' # Svartisen
+RID = 'RGI60-08.01657' # Svartisen
 #RID = 'RGI60-08.01779' # Hardangerjökulen
 #RID = 'RGI60-08.02666' # Aalfotbreen
-RID = 'RGI60-08.01258' # Langfjordjökulen
+#RID = 'RGI60-08.01258' # Langfjordjökulen
 #RID = 'RGI60-08.02382' # Rundvassbreen
 #RID = 'RGI60-08.00966' # Vestre Memurubreen
 #RID = 'RGI60-08.00987' # Graasubreen
@@ -45,7 +45,7 @@ else:
     home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
     model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
 
-override_inputs = True
+override_inputs = False
 check_in_session = True # if this is false, global checking is activated
 override_global = False
 if check_in_session is False: # in that case, we check if this glacier should be modelled in check_file
@@ -73,6 +73,7 @@ for RID in [RID]:
     working_dir = home_dir / 'regional_inversion/output/' / RID
     input_file = working_dir / 'igm_input.nc'
     resolution = 100
+    area_RIDs = []
     if not os.path.exists(input_file) or override_inputs is True:
 
         # obtain all glaciers connected in one glacier complex
@@ -151,12 +152,13 @@ for RID in [RID]:
     pmax = 5000
     beta_0 = 2.0
     theta = 0.3
-    p_save = 500 # number of iterations when output is saved
+    p_save = 50 # number of iterations when output is saved
     p_mb = 1100  # iterations before end when mass balance is recalculated
     s_refresh = 550 # number of iterations when surface is reset
 
     # if Jostedalsbreen is simulated, change inversion parameters
-    if RID in 'RGI60-08.00434' in area_RIDs:
+    
+    if 'RGI60-08.00434' in [area_RIDs, RID]:
         pmax = 12000
         p_mb = 4400
         s_refresh = 1200
@@ -190,6 +192,7 @@ for RID in [RID]:
         glacier.topg.assign(B_init)
         glacier.usurf.assign(S_ref)
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)
+        
 
         # set variables that change with iterations
         p = 0
@@ -210,7 +213,9 @@ for RID in [RID]:
                 glacier.usurf.assign(glacier.usurf + S_diff)
                 glacier.topg.assign(tf.reduce_mean(B_rec_all[-20:], axis = 0))
                 update_surface.assign(5)
-
+                glacier.slopsurfx, glacier.slopsurfy = glacier.compute_gradient_tf(glacier.usurf, glacier.dx, glacier.dx)
+                glacier.thk.assign(glacier.usurf - glacier.topg)
+                
             update_surface.assign_sub(1)
 
             # apply beta ramp-up
@@ -299,6 +304,12 @@ for RID in [RID]:
             glacier.config.tend = p*dt+dt
             glacier.config.tstart = p*dt
             del glacier.already_called_update_t_dt
+            glacier.slopsurfx, glacier.slopsurfy = glacier.compute_gradient_tf(glacier.usurf, glacier.dx, glacier.dx)
+            min_slope = 0.02
+            slope = tf.sqrt(tf.math.square(glacier.slopsurfx) + tf.math.square(glacier.slopsurfy))
+            slope_factor = tf.math.minimum(min_slope/slope, 1e3)
+            glacier.slopsurfx = tf.where(slope < min_slope, glacier.slopsurfx * slope_factor, glacier.slopsurfx)
+            glacier.slopsurfy = tf.where(slope < min_slope, glacier.slopsurfy * slope_factor, glacier.slopsurfy)
                 
     # establish buffer
     bw = 1
