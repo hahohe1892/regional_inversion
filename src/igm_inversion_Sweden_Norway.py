@@ -128,7 +128,7 @@ for RID in [RID]:
     # below is possibility to experiment with some settings
     S_ref[mask == 0] += 0
     B_init[mask == 0] = S_ref[mask == 0]
-    B_init[mask == 1] = S_ref[mask == 1]
+    B_init[mask == 1] = gauss_filter(B_init, 2, 4)[mask == 1] #S_ref[mask == 1]
     
     # smooth velocity field
     vel_smooth = gauss_filter(vel_ref, 2, 4)
@@ -148,16 +148,15 @@ for RID in [RID]:
         c = np.where(A_tilde <= 78, 0, A_tilde - 78)
 
     # set inversion parameters (note: no buffer used currently)
-    dt = 1
-    pmax = 5000
-    beta_0 = 2.0
-    theta = 0.3
+    dt = .2
+    pmax = 3000
+    beta_0 = 0.5
+    theta = 0.8
     p_save = 50 # number of iterations when output is saved
-    p_mb = 1100  # iterations before end when mass balance is recalculated
-    s_refresh = 550 # number of iterations when surface is reset
+    p_mb = 500  # iterations before end when mass balance is recalculated
+    s_refresh = 250 # number of iterations when surface is reset
 
     # if Jostedalsbreen is simulated, change inversion parameters
-    
     if 'RGI60-08.00434' in [area_RIDs, RID]:
         pmax = 12000
         p_mb = 4400
@@ -211,6 +210,7 @@ for RID in [RID]:
                 S_diff = S_ref - glacier.usurf.numpy()
                 S_diff = gauss_filter(S_diff, 2,4)*tf.cast(mask, tf.float32)
                 glacier.usurf.assign(glacier.usurf + S_diff)
+                
                 glacier.topg.assign(tf.reduce_mean(B_rec_all[-20:], axis = 0))
                 update_surface.assign(5)
                 glacier.slopsurfx, glacier.slopsurfy = glacier.compute_gradient_tf(glacier.usurf, glacier.dx, glacier.dx)
@@ -262,7 +262,7 @@ for RID in [RID]:
             new_bed = tf.math.minimum(glacier.usurf, glacier.topg - beta * misfit_masked)
 
             # do bed averaging
-            if p>10 and p%4 == 0 and update_surface < 0:
+            if p>10 and p%40 == 0 and update_surface < 0:
                 if p < 50:
                     new_bed = tf.math.minimum(tf.reduce_mean(B_rec_all[p-4:p], axis = 0), S_new)
                 else:
@@ -305,11 +305,11 @@ for RID in [RID]:
             glacier.config.tstart = p*dt
             del glacier.already_called_update_t_dt
             glacier.slopsurfx, glacier.slopsurfy = glacier.compute_gradient_tf(glacier.usurf, glacier.dx, glacier.dx)
-            min_slope = 0.02
-            slope = tf.sqrt(tf.math.square(glacier.slopsurfx) + tf.math.square(glacier.slopsurfy))
-            slope_factor = tf.math.minimum(min_slope/slope, 1e3)
-            glacier.slopsurfx = tf.where(slope < min_slope, glacier.slopsurfx * slope_factor, glacier.slopsurfx)
-            glacier.slopsurfy = tf.where(slope < min_slope, glacier.slopsurfy * slope_factor, glacier.slopsurfy)
+            #min_slope = 0.02
+            #slope = glacier.getmag(glacier.slopsurfx, glacier.slopsurfy)
+            #slope_factor = tf.math.minimum(min_slope/slope, 1e3)
+            #glacier.slopsurfx = tf.where(slope < min_slope, glacier.slopsurfx * slope_factor, glacier.slopsurfx)
+            #glacier.slopsurfy = tf.where(slope < min_slope, glacier.slopsurfy * slope_factor, glacier.slopsurfy)
                 
     # establish buffer
     bw = 1
