@@ -45,10 +45,10 @@ else:
     home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
     model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
 
-override_inputs = False
-check_in_session = True # if this is false, global checking is activated
-override_global = False
-if check_in_session is False: # in that case, we check if this glacier should be modelled in check_file
+override_inputs = True
+check_global_already_modelled = True # if this is false, global checking is activated
+override_global = True
+if check_global_already_modelled is True: # in that case, we check if this glacier should be modelled in check_file
     check_file = home_dir / 'regional_inversion/already_checked.txt'
     if override_global is True:
         open(check_file, 'w').close()
@@ -62,7 +62,7 @@ already_checked = []
 #for RID in [RID]:
 for RID in RIDs_with_obs:
     # check if this glacier has been modelled either in this session, or ever
-    if check_in_session is False:
+    if check_global_already_modelled is True:
         already_checked = []
         with open(check_file, 'r') as fp:
             for item in fp:
@@ -94,7 +94,7 @@ for RID in RIDs_with_obs:
         input_igm.to_netcdf(input_file)
 
         already_checked.extend(area_RIDs)
-        if check_in_session is False:
+        if check_global_already_modelled is True:
             with open(check_file, 'w') as fp:
                 for item in already_checked:
                     fp.write("{}\n".format(item))
