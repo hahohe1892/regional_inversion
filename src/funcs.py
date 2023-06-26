@@ -487,7 +487,7 @@ def normalize(x):
 def do_kdtree(new_bed, mask, buffer):
     remove_ind = (buffer.numpy() == 1).flatten() + (mask.numpy() == 0).flatten()
     x,y = np.meshgrid(range(new_bed.shape[1]), range(new_bed.shape[0]))
-    xy_arr = np.dstack([x.flatten(), y.flatten()])[0]
+    xy_arr = np.dstack([x.flatten(), y.flatten(), new_bed.flatten()])[0]
     xy_arr = xy_arr[~remove_ind]
     points = np.flip(np.array(np.where(buffer.numpy() == 1)), axis = 0).transpose()
     mytree = scipy.spatial.cKDTree(xy_arr)
@@ -496,3 +496,18 @@ def do_kdtree(new_bed, mask, buffer):
     bed_values = [new_bed[i[1], i[0]] for i in xy_ind]
     new_bed[buffer.numpy() == 1] = bed_values
     return new_bed
+
+
+def inpaint_nans2(im):
+    ipn_kernel = np.array([[1,1,1],[1,0,1],[1,1,1]]) # kernel for inpaint_nans
+    nans = np.isnan(im)
+    while np.sum(nans)>0:
+        im[nans] = 0
+        vNeighbors = scipy.signal.convolve2d((nans==False),ipn_kernel,mode='same',boundary='symm')
+        im2 = scipy.signal.convolve2d(im,ipn_kernel,mode='same',boundary='symm')
+        im2[vNeighbors>0] = im2[vNeighbors>0]/vNeighbors[vNeighbors>0]
+        im2[vNeighbors==0] = np.nan
+        im2[(nans==False)] = im[(nans==False)]
+        im = deepcopy(im2)
+        nans = np.isnan(im)
+    return im
