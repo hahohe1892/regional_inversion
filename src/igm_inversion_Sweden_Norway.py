@@ -151,7 +151,7 @@ for RID in RIDs_with_obs:
     dt = .2
     pmax = 3000
     beta_0 = 0.5
-    theta = 0.8
+    theta = 0.6
     p_save = 500 # number of iterations when output is saved
     p_mb = 500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
@@ -276,9 +276,9 @@ for RID in RIDs_with_obs:
             glacier.thk.assign(tf.math.maximum(0, (glacier.usurf - glacier.topg)))
 
             #set minimum thickness
-            glacier.thk.assign(tf.where(glacier.thk<10, 10 * tf.cast(mask, tf.float32), glacier.thk))
-            glacier.topg.assign(glacier.usurf - glacier.thk)
-            print(np.min(glacier.thk[mask == 1]))
+            #glacier.thk.assign(tf.where(glacier.thk<10, 10 * tf.cast(mask, tf.float32), glacier.thk))
+            #glacier.topg.assign(glacier.usurf - glacier.thk)
+            #print(np.min(glacier.thk[mask == 1]))
             # update mass balance to account for ice leaving mask
             if p == (pmax - p_mb):
                 left_sum_mean = tf.math.reduce_mean(left_sum[-100:])
