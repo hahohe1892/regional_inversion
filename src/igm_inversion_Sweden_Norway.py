@@ -59,8 +59,8 @@ gdf = gpd.read_file(fr)
 Fill_Value = 9999.0
 already_checked = []
 #for RID in gdf.RGIId.to_list()[4:]:
-for RID in [RID]:
-#for RID in RIDs_with_obs[1:]:
+#for RID in [RID]:
+for RID in RIDs_with_obs:
     # check if this glacier has been modelled either in this session, or ever
     if check_in_session is False:
         already_checked = []
@@ -152,16 +152,16 @@ for RID in [RID]:
     pmax = 3000
     beta_0 = 0.5
     theta = 0.8
-    p_save = 50 # number of iterations when output is saved
+    p_save = 500 # number of iterations when output is saved
     p_mb = 500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
 
     # if Jostedalsbreen is simulated, change inversion parameters
     if 'RGI60-08.00434' in [area_RIDs, RID]:
-        pmax = 12000
-        p_mb = 4400
-        s_refresh = 1200
-        beta_0 = 1
+        pmax = 7000
+        p_mb = 2400
+        s_refresh = 600
+        beta_0 = .5
     
     # prepare vector where last 50 beds will be saved in (used for bed averaging)
     B_rec_all = tf.Variable(tf.zeros(shape=(50, mask.shape[0], mask.shape[1])))
