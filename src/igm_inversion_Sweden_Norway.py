@@ -77,7 +77,7 @@ for RID in RIDs_with_obs:
     if not os.path.exists(input_file) or override_inputs is True:
 
         # obtain all glaciers connected in one glacier complex
-        input_igm, internal_boundaries, area_RIDs = obtain_area_mosaic(RID, max_n_glaciers = 30, discard_list = already_checked)
+        input_igm, internal_boundaries, area_RIDs = obtain_area_mosaic(RID, discard_list = already_checked)
         write_path_to_mosaic(RID, area_RIDs)
 
         if 'usurf_oggm' in input_igm.keys(): # RGI60-08.01258 Langfjordjökulen has global DEM as well in input fields
