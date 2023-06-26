@@ -306,7 +306,7 @@ def nearby_glacier(RID, RGI, buffer_width):
     return area_RIDs, intersection_polys, bounds, intersection_polys_union
 
 
-def obtain_area_mosaic(RID, buffer_width = 200, max_n_glaciers = 1e3, discard_list = []):
+def obtain_area_mosaic(RID, buffer_width = 200, max_n_glaciers = 1000, discard_list = []):
     '''
     searches for nearby (within 200 m buffer) glaciers based on RGI polygons,
     extracts their RID, bounds and the overlap between the buffer and the nearby glaciers.
