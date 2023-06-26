@@ -274,7 +274,11 @@ for RID in RIDs_with_obs:
             # assign new ice thickness and bed
             glacier.topg.assign(new_bed)
             glacier.thk.assign(tf.math.maximum(0, (glacier.usurf - glacier.topg)))
-            
+
+            #set minimum thickness
+            glacier.thk.assign(tf.where(glacier.thk<10, 10 * tf.cast(mask, tf.float32), glacier.thk))
+            glacier.topg.assign(glacier.usurf - glacier.thk)
+            print(np.min(glacier.thk[mask == 1]))
             # update mass balance to account for ice leaving mask
             if p == (pmax - p_mb):
                 left_sum_mean = tf.math.reduce_mean(left_sum[-100:])

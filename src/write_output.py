@@ -104,17 +104,23 @@ def raw_mask_out_to_Win(field = 'mask', file = 'gridded_data.nc'):
         shutil.copy(path_out, '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/08_rgi60_Scandinavia/raw_masks/mask_' + RID + '.tif')
 
 
-def retrieve_from_HPC(glaciers, file = 'ex.nc', date = '01/01/01/1970'):
+def retrieve_from_HPC(glaciers, file = 'ex.nc', date = '01/01/01/1970', new_name = 'ex.nc'):
     for glacier in glaciers:
         remote_path = '/mimer/NOBACKUP/groups/snic2022-22-55/regional_inversion/output/{}/{}'.format(glacier, file)
+        mosaic_ref_path = '/mimer/NOBACKUP/groups/snic2022-22-55/regional_inversion/output/{}/mosaic_reference.txt'.format(glacier)
         date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
+        # retrieve mosaic reference for all glaciers, regardless of when they were modelled last
+        subprocess.call(['scp', 'alvis2:' + mosaic_ref_path, '/home/thomas/regional_inversion/output/{}/'.format(glacier)])
         try:
             file_time = int(subprocess.check_output(['ssh', 'alvis2', 'stat -c %Y', remote_path]).strip())
         except(subprocess.CalledProcessError):
             continue
         if file_time > date_unix:
             print(glacier)
-            subprocess.call(['scp', 'alvis2:' + remote_path, '/home/thomas/regional_inversion/output/{}/'.format(glacier)])
+            if new_name == 'ex.nc':
+                subprocess.call(['scp', 'alvis2:' + remote_path, '/home/thomas/regional_inversion/output/{}/'.format(glacier)])
+            else:
+                subprocess.call(['scp', 'alvis2:' + remote_path, '/home/thomas/regional_inversion/output/{}/{}'.format(glacier, new_name)])
 
 
 def get_mosaic_reference(RID):
@@ -154,4 +160,17 @@ def rename_to_version(glaciers, old_name, new_name):
         else:
             print('{} not found; skipping'.format(path + old_name))
             continue
-        
+
+
+def ex_on_Win_to_output(glaciers, version):
+    for glacier in glaciers:
+        print('moving ' + glacier + '...')
+        Win_path = '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/{}/ex/{}_ex.nc'.format(version, glacier)
+        path = '/home/thomas/regional_inversion/output/{}/'.format(glacier)
+        if os.path.exists(Win_path):
+            subprocess.call(['cp', Win_path, path + 'ex_{}.nc'.format(version)])
+            print('...done')
+        else:
+            print('{} not found; skipping'.format(path + old_name))
+            continue
+    
