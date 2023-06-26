@@ -149,17 +149,17 @@ for RID in RIDs_with_obs:
 
     # set inversion parameters (note: no buffer used currently)
     dt = .2
-    pmax = 3000
+    pmax = 6000
     beta_0 = 0.5
-    theta = 0.6
-    p_save = 500 # number of iterations when output is saved
-    p_mb = 500  # iterations before end when mass balance is recalculated
+    theta = 0.8
+    p_save = 200 # number of iterations when output is saved
+    p_mb = 1500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
 
     # if Jostedalsbreen is simulated, change inversion parameters
     if 'RGI60-08.00434' in [area_RIDs, RID]:
-        pmax = 7000
-        p_mb = 2400
+        pmax = 10000
+        p_mb = 3000
         s_refresh = 600
         beta_0 = .5
     
