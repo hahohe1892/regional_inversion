@@ -143,3 +143,15 @@ def copy_all_ex_to_Win(date = '01/01/01/1970'):
         except FileNotFoundError:
             print('ex.nc does not exist for glacier {}'.format(RID))
             continue
+
+def rename_to_version(glaciers, old_name, new_name):
+    for glacier in glaciers:
+        print('renaming ' + glacier + '...')
+        path = '/home/thomas/regional_inversion/output/{}/'.format(glacier)
+        if os.path.exists(path + old_name):
+            subprocess.call(['mv', path + old_name, path + new_name])
+            print('...done')
+        else:
+            print('{} not found; skipping'.format(path + old_name))
+            continue
+        
