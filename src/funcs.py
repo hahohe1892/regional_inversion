@@ -11,7 +11,7 @@ import subprocess
 import matplotlib.pyplot as plt
 #import PISM
 import os.path
-
+from scipy.stats import gaussian_kde
 #ctx = PISM.Context()
 
 def identify_neighbors(n,m, nan_list, talks_to):
@@ -511,3 +511,8 @@ def inpaint_nans2(im):
         im = deepcopy(im2)
         nans = np.isnan(im)
     return im
+
+def calc_point_density(field1, field2):
+    xy = np.vstack([field1, field2])
+    z = gaussian_kde(xy)(xy)
+    return z

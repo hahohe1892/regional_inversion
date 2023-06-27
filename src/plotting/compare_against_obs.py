@@ -14,7 +14,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import math
 
 home_dir = Path('/home/thomas')
-output_file = 'ex_v6.4.nc'
+output_file = 'ex_v6.6.nc'
 Fill_Value = 9999.0
 iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
@@ -31,9 +31,11 @@ for i,RID in enumerate(RIDs_with_obs):
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
     if not os.path.exists(working_dir / output_file):
         continue
-    
+    slope_x, slope_y = Igm.compute_gradient_tf(input_igm.usurf.data, input_igm.usurf.data[0], 100, 100)
+    slope = np.sqrt(slope_x**2 + slope_y**2)
+    norm_slope = normalize(slope*input_igm.mask.data[0])
     if RID == 'RGI60-08.00213':
-        out_thk = rioxr.open_rasterio(working_dir / output_file).thk[-1]
+        out_thk = rioxr.open_rasterio(working_dir / output_file).thk[iteration]
         thk_consensus = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/RGI60-08.00213_thickness.tif')
         thk_Millan = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/THICKNESS_RGI-8.2_2021July09.tif')
         radar_bed = rioxr.open_rasterio('/home/thomas/regional_inversion/Storglaciären_radar_bed.tif')
@@ -48,6 +50,7 @@ for i,RID in enumerate(RIDs_with_obs):
                                       'THICK_CONS': thk_consensus.data.flatten(),
                                       'THICK_Millan': thk_Millan.data.flatten()})
         Storglaciären = Storglaciären.dropna(subset = ['THICKNESS'])
+        Storglaciären['glacier'] = RID
         all_NO = pd.concat([all_NO, Storglaciären])
     else:
         out_to_tif(RID, 'topg', i = iteration, file = output_file, file_not_standard_dims = True)
@@ -87,12 +90,13 @@ for i,RID in enumerate(RIDs_with_obs):
         glathida_NO['Difference'] = glathida_NO.THICK_OBS_CORR - glathida_NO.THICK_MOD
         glathida_NO['Percent_difference'] = glathida_NO.Difference/glathida_NO.THICK_OBS_CORR
         glathida_NO = glathida_NO.dropna(subset = ['THICK_MOD'])
+        glathida_NO['glacier'] = RID
         if i == 0:
             all_NO = glathida_NO.copy(deep = True)
         else:
             all_NO = pd.concat([all_NO, glathida_NO])
 
-        
+
 reference_thickness = all_NO.THICKNESS
 rmse_mod = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_MOD)).mean())
 rmse_cons = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_CONS)).mean())
@@ -124,11 +128,16 @@ stats_table = pd.DataFrame({'r':[np.nan, R_mod, R_cons, R_Millan],
 
 print(stats_table)
 
+
+pd_MOD = calc_point_density(reference_thickness, all_NO.THICK_MOD)
+pd_CONS = calc_point_density(reference_thickness, all_NO.THICK_CONS)
+cmap = plt.get_cmap('Set1')
+colors = cmap(np.linspace(0, 1, len(all_NO.glacier)))
 fs = 17
 fig, ax = plt.subplots(1,3, figsize = (18,6))
-ax[0].scatter(reference_thickness, all_NO.THICK_Millan, alpha = .2, label = 'Millan (2022)')
-ax[1].scatter(reference_thickness, all_NO.THICK_CONS, alpha = .2, label = 'Consensus')
-ax[2].scatter(reference_thickness, all_NO.THICK_MOD, alpha = .2, label = 'This study')
+ax[0].scatter(reference_thickness, all_NO.THICK_Millan, alpha = .1, label = 'Millan (2022)')
+ax[1].scatter(reference_thickness, all_NO.THICK_CONS, alpha = .1, label = 'Consensus', c = pd_CONS)
+ax[2].scatter(reference_thickness, all_NO.THICK_MOD, alpha = .1, label = 'This study', c = pd_MOD)
 for axes in ax:
     axes.plot(range(700), range(700), '--', c='r')
     axes.set(adjustable='box', aspect='equal')
