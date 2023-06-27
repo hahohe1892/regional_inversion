@@ -24,8 +24,8 @@ from tensorflow.python.client import device_lib
 #RID = 'RGI60-07.01475' # Droenbreen
 #RID = 'RGI60-07.00389' # Bergmesterbreen
 #RID = 'RGI60-08.00434' # Tunsbergdalsbreen
-RID = 'RGI60-08.01657' # Svartisen
-#RID = 'RGI60-08.01779' # Hardangerjökulen
+#RID = 'RGI60-08.01657' # Svartisen
+RID = 'RGI60-08.01779' # Hardangerjökulen
 #RID = 'RGI60-08.02666' # Aalfotbreen
 #RID = 'RGI60-08.01258' # Langfjordjökulen
 #RID = 'RGI60-08.02382' # Rundvassbreen
@@ -174,7 +174,7 @@ for RID in RIDs_with_obs:
     glacier.config.init_slidingco = c
     glacier.config.init_arrhenius = A 
     glacier.config.working_dir = working_dir
-    glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf'])
+    glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf', 'dhdt'])
     glacier.config.verbosity = 0
     glacier.config.geology_file = working_dir / 'igm_input.nc'
     glacier.config.iceflow_model_lib_path = model_dir / 'f15_cfsflow_GJ_22_a/{}'.format(resolution)
@@ -190,7 +190,8 @@ for RID in RIDs_with_obs:
         glacier.topg.assign(B_init)
         glacier.usurf.assign(S_ref)
         glacier.thk.assign((glacier.usurf - glacier.topg)*glacier.icemask)
-        
+        glacier.dhdt.assign(S_ref * 0)
+        glacier.var_info['dhdt'] = ['surface elevation change', 'm/yr']
 
         # set variables that change with iterations
         p = 0
@@ -239,6 +240,7 @@ for RID in RIDs_with_obs:
 
             # calculate dhdt
             dhdt = (glacier.usurf - S_old)/dt
+            glacier.dhdt.assign(dhdt)
             # dhdt is equal to misfit when using apparent mass balance
             misfit = tf.math.minimum(tf.math.maximum(dhdt, -10), 10)
 
