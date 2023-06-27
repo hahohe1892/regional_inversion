@@ -80,9 +80,8 @@ for RID in RIDs_with_obs:
         input_igm, internal_boundaries, area_RIDs = obtain_area_mosaic(RID, discard_list = already_checked)
         write_path_to_mosaic(RID, area_RIDs)
 
-        if 'usurf_oggm' in input_igm.keys(): # RGI60-08.01258 Langfjordjökulen has global DEM as well in input fields
-            input_igm.usurf_oggm.data = input_igm.usurf_oggm.where(input_igm.usurf_oggm != -9999, 9999).data
-            input_igm.usurf_oggm.data = input_igm.usurf_oggm.where(~np.isnan(input_igm.usurf_oggm), 9999).data
+        input_igm.usurf_oggm.data = input_igm.usurf_oggm.where(input_igm.usurf_oggm != -9999, 9999).data
+        input_igm.usurf_oggm.data = input_igm.usurf_oggm.where(~np.isnan(input_igm.usurf_oggm), 9999).data
 
         input_igm = input_igm.fillna(0)
         if not internal_boundaries is None:
@@ -106,7 +105,7 @@ for RID in RIDs_with_obs:
     input_igm = input_igm.squeeze()
 
     # obtain input fields from input_igm
-    S_ref = deepcopy(input_igm.usurf.data)
+    S_ref = deepcopy(input_igm.usurf_oggm.data)
     S_old = tf.Variable(S_ref)
     B_init = input_igm.topg.data
     dh_ref = input_igm.dhdt.data
