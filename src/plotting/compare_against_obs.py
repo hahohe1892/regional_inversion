@@ -14,7 +14,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import math
 
 home_dir = Path('/home/thomas')
-output_file = 'ex_v6.1.nc'
+output_file = 'ex_v6.4.nc'
 Fill_Value = 9999.0
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
 
@@ -22,7 +22,7 @@ icecaps = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.00435
 glaciers = [i for i in RIDs_with_obs if i not in icecaps]
 
 
-for i,RID in enumerate(glaciers):
+for i,RID in enumerate(RIDs_with_obs):
     #RID = get_mosaic_reference(RID_obs)
     working_dir = home_dir / 'regional_inversion/output/' / RID
     input_file = working_dir / 'igm_input.nc'
@@ -31,48 +31,68 @@ for i,RID in enumerate(glaciers):
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
     if not os.path.exists(working_dir / output_file):
         continue
-    out_to_tif(RID, 'topg', i = -1, file = output_file, file_not_standard_dims = True)
-    out_to_tif(RID, 'thk', i = -1, file = output_file, file_not_standard_dims = True)
-    out_to_tif(RID, 'velsurf_mag', i = -1, file = output_file, file_not_standard_dims = True)
-    out_to_tif(RID, 'usurf', i = 0, file = output_file, file_not_standard_dims = True)
-    #out_to_tif(RID, 'mask', i = 0, file = 'igm_input.nc', file_not_standard_dims = True)
-    out_to_tif(RID, 'smb', i = 0, file = output_file, file_not_standard_dims = True)
-    out_thk = rasterio.open(working_dir / 'thk.tif')
-    out_topg = rasterio.open(working_dir / 'topg.tif')
-    out_velsurf = rasterio.open(working_dir / 'velsurf_mag.tif')
-    in_usurf = rasterio.open(working_dir / 'usurf.tif')
-    #in_mask = rasterio.open(working_dir / 'mask.tif')
-    in_smb = rasterio.open(working_dir / 'apparent_mass_balance.tif')
-    thk_consensus = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/all_thk_consensus.tif')
-    thk_Millan = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/all_thk_Millan.tif')
-    glathida_NO = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/glathida-3.1.0/data/glathida_NO.csv')
-    glathida_NO = gpd.GeoDataFrame(glathida_NO, geometry=gpd.points_from_xy(glathida_NO.POINT_LON, glathida_NO.POINT_LAT),crs = 'epsg: 4326')
-    glathida_NO = glathida_NO.to_crs(thk_consensus.crs)
-    coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
-    glathida_NO['THICK_CONS'] = [x[0] for x in thk_consensus.sample(coords)]
-    glathida_NO = glathida_NO.to_crs(thk_Millan.crs)
-    coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
-    glathida_NO['THICK_Millan'] = [x[0] for x in thk_Millan.sample(coords)]
-    glathida_NO.THICK_Millan = glathida_NO.THICK_Millan.where(glathida_NO.THICK_Millan >= 0, np.nan)
-    glathida_NO = glathida_NO.to_crs(out_thk.crs)
-    glathida_NO['TOPG'] = glathida_NO.ELEVATION - glathida_NO.THICKNESS
-    coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
-    glathida_NO['THICK_MOD'] = [x[0] for x in out_thk.sample(coords)]
-    glathida_NO['TOPG_MOD'] = [x[0] for x in out_topg.sample(coords)]
-    glathida_NO['USURF_TODAY'] = [x[0] for x in in_usurf.sample(coords)]
-    glathida_NO['VELSURF_MOD'] = [x[0] for x in out_velsurf.sample(coords)]
-    glathida_NO['THICK_OBS_CORR'] = (glathida_NO.USURF_TODAY) - glathida_NO.TOPG
-    glathida_NO.THICK_OBS_CORR = glathida_NO.THICK_OBS_CORR.where(glathida_NO.THICK_OBS_CORR >=0, np.nan)
-    glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD < 1e5)
-    glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD > -1e5)
-    glathida_NO['Difference'] = glathida_NO.THICK_OBS_CORR - glathida_NO.THICK_MOD
-    glathida_NO['Percent_difference'] = glathida_NO.Difference/glathida_NO.THICK_OBS_CORR
-    glathida_NO = glathida_NO.dropna(subset = ['THICK_MOD'])
-    if i == 0:
-        all_NO = glathida_NO.copy(deep = True)
+    
+    if RID == 'RGI60-08.00213':
+        out_thk = rioxr.open_rasterio(working_dir / output_file).thk[-1]
+        thk_consensus = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/RGI60-08.00213_thickness.tif')
+        thk_Millan = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/THICKNESS_RGI-8.2_2021July09.tif')
+        radar_bed = rioxr.open_rasterio('/home/thomas/regional_inversion/Storglaciären_radar_bed.tif')
+        radar_bed = radar_bed.rio.reproject_match(input_igm)
+        thk_consensus = thk_consensus.rio.reproject_match(input_igm)
+        thk_Millan = thk_Millan.rio.reproject_match(input_igm)
+        radar_bed.data[radar_bed.data == radar_bed.attrs['_FillValue']] = np.nan
+        radar_thk = input_igm.usurf - radar_bed.data[0]
+        radar_thk = np.maximum(0, radar_thk)
+        Storglaciären = pd.DataFrame({'THICKNESS': radar_thk.data[0].flatten(),
+                                      'THICK_MOD': out_thk.data.flatten(),
+                                      'THICK_CONS': thk_consensus.data.flatten(),
+                                      'THICK_Millan': thk_Millan.data.flatten()})
+        Storglaciären = Storglaciären.dropna(subset = ['THICKNESS'])
+        all_NO = pd.concat([all_NO, Storglaciären])
     else:
-        all_NO = pd.concat([all_NO, glathida_NO])
+        out_to_tif(RID, 'topg', i = -1, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'thk', i = -1, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'velsurf_mag', i = -1, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'usurf', i = 0, file = output_file, file_not_standard_dims = True)
+        #out_to_tif(RID, 'mask', i = 0, file = 'igm_input.nc', file_not_standard_dims = True)
+        out_to_tif(RID, 'smb', i = 0, file = output_file, file_not_standard_dims = True)
+        out_thk = rasterio.open(working_dir / 'thk.tif')
+        out_topg = rasterio.open(working_dir / 'topg.tif')
+        out_velsurf = rasterio.open(working_dir / 'velsurf_mag.tif')
+        in_usurf = rasterio.open(working_dir / 'usurf.tif')
+        #in_mask = rasterio.open(working_dir / 'mask.tif')
+        in_smb = rasterio.open(working_dir / 'apparent_mass_balance.tif')
+        thk_consensus = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/all_thk_consensus.tif')
+        thk_Millan = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/all_thk_Millan.tif')
+        glathida_NO = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/glathida-3.1.0/data/glathida_NO.csv')
+        glathida_NO = gpd.GeoDataFrame(glathida_NO, geometry=gpd.points_from_xy(glathida_NO.POINT_LON, glathida_NO.POINT_LAT),crs = 'epsg: 4326')
+        glathida_NO = glathida_NO.to_crs(thk_consensus.crs)
+        coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
+        glathida_NO['THICK_CONS'] = [x[0] for x in thk_consensus.sample(coords)]
+        glathida_NO = glathida_NO.to_crs(thk_Millan.crs)
+        coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
+        glathida_NO['THICK_Millan'] = [x[0] for x in thk_Millan.sample(coords)]
+        glathida_NO.THICK_Millan = glathida_NO.THICK_Millan.where(glathida_NO.THICK_Millan >= 0, np.nan)
+        glathida_NO = glathida_NO.to_crs(out_thk.crs)
+        glathida_NO['TOPG'] = glathida_NO.ELEVATION - glathida_NO.THICKNESS
+        coords = [(x,y) for x, y in zip(glathida_NO.geometry.x, glathida_NO.geometry.y)]
+        glathida_NO['THICK_MOD'] = [x[0] for x in out_thk.sample(coords)]
+        glathida_NO['TOPG_MOD'] = [x[0] for x in out_topg.sample(coords)]
+        glathida_NO['USURF_TODAY'] = [x[0] for x in in_usurf.sample(coords)]
+        glathida_NO['VELSURF_MOD'] = [x[0] for x in out_velsurf.sample(coords)]
+        glathida_NO['THICK_OBS_CORR'] = (glathida_NO.USURF_TODAY) - glathida_NO.TOPG
+        glathida_NO.THICK_OBS_CORR = glathida_NO.THICK_OBS_CORR.where(glathida_NO.THICK_OBS_CORR >=0, np.nan)
+        glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD < 1e5)
+        glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD > -1e5)
+        glathida_NO['Difference'] = glathida_NO.THICK_OBS_CORR - glathida_NO.THICK_MOD
+        glathida_NO['Percent_difference'] = glathida_NO.Difference/glathida_NO.THICK_OBS_CORR
+        glathida_NO = glathida_NO.dropna(subset = ['THICK_MOD'])
+        if i == 0:
+            all_NO = glathida_NO.copy(deep = True)
+        else:
+            all_NO = pd.concat([all_NO, glathida_NO])
 
+        
 reference_thickness = all_NO.THICKNESS
 rmse_mod = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_MOD)).mean())
 rmse_cons = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_CONS)).mean())
