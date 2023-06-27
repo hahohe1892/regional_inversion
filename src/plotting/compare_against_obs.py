@@ -16,8 +16,8 @@ import math
 home_dir = Path('/home/thomas')
 output_file = 'ex_v6.4.nc'
 Fill_Value = 9999.0
+iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
-
 icecaps = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.00435']
 glaciers = [i for i in RIDs_with_obs if i not in icecaps]
 
@@ -50,9 +50,9 @@ for i,RID in enumerate(RIDs_with_obs):
         Storglaciären = Storglaciären.dropna(subset = ['THICKNESS'])
         all_NO = pd.concat([all_NO, Storglaciären])
     else:
-        out_to_tif(RID, 'topg', i = -1, file = output_file, file_not_standard_dims = True)
-        out_to_tif(RID, 'thk', i = -1, file = output_file, file_not_standard_dims = True)
-        out_to_tif(RID, 'velsurf_mag', i = -1, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'topg', i = iteration, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'thk', i = iteration, file = output_file, file_not_standard_dims = True)
+        out_to_tif(RID, 'velsurf_mag', i = iteration, file = output_file, file_not_standard_dims = True)
         out_to_tif(RID, 'usurf', i = 0, file = output_file, file_not_standard_dims = True)
         #out_to_tif(RID, 'mask', i = 0, file = 'igm_input.nc', file_not_standard_dims = True)
         out_to_tif(RID, 'smb', i = 0, file = output_file, file_not_standard_dims = True)
