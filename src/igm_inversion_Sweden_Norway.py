@@ -172,7 +172,7 @@ for RID in RIDs_with_obs:
     glacier.config.tsave = 1
     glacier.config.cfl = 0.3
     glacier.config.init_slidingco = 0
-    glacier.config.init_arrhenius = 60
+    glacier.config.init_arrhenius = 55
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf', 'dhdt'])
     glacier.config.verbosity = 0
