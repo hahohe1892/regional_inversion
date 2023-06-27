@@ -105,7 +105,7 @@ for RID in RIDs_with_obs:
     input_igm = input_igm.squeeze()
 
     # obtain input fields from input_igm
-    S_ref = deepcopy(input_igm.usurf_oggm.data)
+    S_ref = deepcopy(input_igm.usurf.data)
     S_old = tf.Variable(S_ref)
     B_init = input_igm.topg.data
     dh_ref = input_igm.dhdt.data
@@ -171,8 +171,8 @@ for RID in RIDs_with_obs:
     glacier.config.tend = dt
     glacier.config.tsave = 1
     glacier.config.cfl = 0.3
-    glacier.config.init_slidingco = c
-    glacier.config.init_arrhenius = A 
+    glacier.config.init_slidingco = 0
+    glacier.config.init_arrhenius = 60
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf', 'dhdt'])
     glacier.config.verbosity = 0
