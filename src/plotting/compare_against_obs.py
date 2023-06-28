@@ -12,9 +12,11 @@ import sys
 from pathlib import Path
 from matplotlib.backends.backend_pdf import PdfPages
 import math
+from igm.igm import Igm
 
 home_dir = Path('/home/thomas')
 output_file = 'ex_v6.6.nc'
+output_file_pp = 'ex_v6.6_pp_{}.tif'
 Fill_Value = 9999.0
 iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
@@ -31,11 +33,17 @@ for i,RID in enumerate(RIDs_with_obs):
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
     if not os.path.exists(working_dir / output_file):
         continue
+    slope = deepcopy(input_igm.climatic_mass_balance)
     slope_x, slope_y = Igm.compute_gradient_tf(input_igm.usurf.data, input_igm.usurf.data[0], 100, 100)
-    slope = np.sqrt(slope_x**2 + slope_y**2)
-    norm_slope = normalize(slope*input_igm.mask.data[0])
+    slope_calc = np.sqrt(slope_x**2 + slope_y**2)
+    slope.data[0] = slope_calc*input_igm.mask.data[0]#normalize(slope_calc*input_igm.mask.data[0])
+    slope.rio.to_raster(working_dir / 'slope.tif')
     if RID == 'RGI60-08.00213':
-        out_thk = rioxr.open_rasterio(working_dir / output_file).thk[iteration]
+        if output_file_pp is not None:
+            out_thk = rasterio.open(working_dir / output_file_pp.format('thk')).read()
+        else:
+            out_thk = rioxr.open_rasterio(working_dir / output_file).thk[iteration].data
+        in_slope = rioxr.open_rasterio(working_dir / 'slope.tif')
         thk_consensus = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/RGI60-08.00213_thickness.tif')
         thk_Millan = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/THICKNESS_RGI-8.2_2021July09.tif')
         radar_bed = rioxr.open_rasterio('/home/thomas/regional_inversion/Storglaciären_radar_bed.tif')
@@ -46,25 +54,32 @@ for i,RID in enumerate(RIDs_with_obs):
         radar_thk = input_igm.usurf - radar_bed.data[0]
         radar_thk = np.maximum(0, radar_thk)
         Storglaciären = pd.DataFrame({'THICKNESS': radar_thk.data[0].flatten(),
-                                      'THICK_MOD': out_thk.data.flatten(),
+                                      'THICK_MOD': out_thk.flatten(),
                                       'THICK_CONS': thk_consensus.data.flatten(),
-                                      'THICK_Millan': thk_Millan.data.flatten()})
+                                      'THICK_Millan': thk_Millan.data.flatten(),
+                                      'SLOPE': in_slope.data[0].flatten()})
         Storglaciären = Storglaciären.dropna(subset = ['THICKNESS'])
         Storglaciären['glacier'] = RID
         all_NO = pd.concat([all_NO, Storglaciären])
     else:
-        out_to_tif(RID, 'topg', i = iteration, file = output_file, file_not_standard_dims = True)
-        out_to_tif(RID, 'thk', i = iteration, file = output_file, file_not_standard_dims = True)
+        if output_file_pp is not None:
+            out_thk = rasterio.open(working_dir / output_file_pp.format('thk'))
+            out_topg = rasterio.open(working_dir / output_file_pp.format('topg'))
+        else:
+            out_to_tif(RID, 'topg', i = iteration, file = output_file, file_not_standard_dims = True)
+            out_to_tif(RID, 'thk', i = iteration, file = output_file, file_not_standard_dims = True)
+            out_thk = rasterio.open(working_dir / 'thk.tif')
+            out_topg = rasterio.open(working_dir / 'topg.tif')
+
         out_to_tif(RID, 'velsurf_mag', i = iteration, file = output_file, file_not_standard_dims = True)
         out_to_tif(RID, 'usurf', i = 0, file = output_file, file_not_standard_dims = True)
         #out_to_tif(RID, 'mask', i = 0, file = 'igm_input.nc', file_not_standard_dims = True)
         out_to_tif(RID, 'smb', i = 0, file = output_file, file_not_standard_dims = True)
-        out_thk = rasterio.open(working_dir / 'thk.tif')
-        out_topg = rasterio.open(working_dir / 'topg.tif')
         out_velsurf = rasterio.open(working_dir / 'velsurf_mag.tif')
         in_usurf = rasterio.open(working_dir / 'usurf.tif')
         #in_mask = rasterio.open(working_dir / 'mask.tif')
         in_smb = rasterio.open(working_dir / 'apparent_mass_balance.tif')
+        in_slope = rasterio.open(working_dir / 'slope.tif')
         thk_consensus = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/all_thk_consensus.tif')
         thk_Millan = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/all_thk_Millan.tif')
         glathida_NO = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/glathida-3.1.0/data/glathida_NO.csv')
@@ -83,6 +98,7 @@ for i,RID in enumerate(RIDs_with_obs):
         glathida_NO['TOPG_MOD'] = [x[0] for x in out_topg.sample(coords)]
         glathida_NO['USURF_TODAY'] = [x[0] for x in in_usurf.sample(coords)]
         glathida_NO['VELSURF_MOD'] = [x[0] for x in out_velsurf.sample(coords)]
+        glathida_NO['SLOPE'] = [x[0] for x in in_slope.sample(coords)]
         glathida_NO['THICK_OBS_CORR'] = (glathida_NO.USURF_TODAY) - glathida_NO.TOPG
         glathida_NO.THICK_OBS_CORR = glathida_NO.THICK_OBS_CORR.where(glathida_NO.THICK_OBS_CORR >=0, np.nan)
         glathida_NO = glathida_NO.where(glathida_NO.THICK_MOD < 1e5)
