@@ -23,9 +23,9 @@ from tensorflow.python.client import device_lib
 #RID = 'RGI60-08.00121' # Mikkajekna
 #RID = 'RGI60-07.01475' # Droenbreen
 #RID = 'RGI60-07.00389' # Bergmesterbreen
-#RID = 'RGI60-08.00434' # Tunsbergdalsbreen
+RID = 'RGI60-08.00434' # Tunsbergdalsbreen
 #RID = 'RGI60-08.01657' # Svartisen
-RID = 'RGI60-08.01779' # Hardangerjökulen
+#RID = 'RGI60-08.01779' # Hardangerjökulen
 #RID = 'RGI60-08.02666' # Aalfotbreen
 #RID = 'RGI60-08.01258' # Langfjordjökulen
 #RID = 'RGI60-08.02382' # Rundvassbreen
@@ -59,8 +59,8 @@ gdf = gpd.read_file(fr)
 Fill_Value = 9999.0
 already_checked = []
 #for RID in gdf.RGIId.to_list()[4:]:
-#for RID in [RID]:
-for RID in RIDs_with_obs:
+for RID in [RID]:
+#for RID in RIDs_with_obs:
     # check if this glacier has been modelled either in this session, or ever
     if check_global_already_modelled is True:
         already_checked = []
@@ -242,7 +242,7 @@ for RID in RIDs_with_obs:
             dhdt = (glacier.usurf - S_old)/dt
             glacier.dhdt.assign(dhdt)
             # dhdt is equal to misfit when using apparent mass balance
-            misfit = tf.math.minimum(tf.math.maximum(dhdt, -10), 10)
+            misfit = tf.math.minimum(tf.math.maximum(dhdt, -2), 2)
 
             # check how much ice has left mask
             left_sum[p].assign(tf.math.reduce_sum(tf.where(mask == 0, dhdt, 0)))
