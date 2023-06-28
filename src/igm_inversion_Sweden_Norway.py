@@ -151,7 +151,7 @@ for RID in [RID]:
     pmax = 6000
     beta_0 = 0.5
     theta = 0.8
-    p_save = 20 # number of iterations when output is saved
+    p_save = 200 # number of iterations when output is saved
     p_mb = 1500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
 
