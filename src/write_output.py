@@ -132,22 +132,17 @@ def get_mosaic_reference(RID):
     return file_content[-1]
 
 
-def copy_all_ex_to_Win(date = '01/01/01/1970'):
-    RGI_region = '08'
-    fr = utils.get_rgi_region_file(RGI_region, version='62')
-    gdf = gpd.read_file(fr)
-    RIDs = gdf.RGIId.to_list()[4:]
-    
-    for RID in RIDs:
+def copy_to_Win(glaciers, file = 'ex.nc', date = '01/01/01/1970'):    
+    for RID in glaciers:
         try:
-            path = '/home/thomas/regional_inversion/output/' + RID + '/ex.nc'
+            path = '/home/thomas/regional_inversion/output/' + RID + '/' + file
             date_unix = time.mktime(datetime.datetime.strptime(date, "%H/%d/%m/%Y").timetuple())
             file_time = os.path.getmtime(path)
             if file_time > date_unix:
-                shutil.copy('/home/thomas/regional_inversion/output/' + RID + '/ex.nc', '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + '_ex.nc')
+                shutil.copy(path, '/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/' + RID + file)
                 print(RID + ' done')
         except FileNotFoundError:
-            print('ex.nc does not exist for glacier {}'.format(RID))
+            print('{} does not exist for glacier {}'.format(file, RID))
             continue
 
 def rename_to_version(glaciers, old_name, new_name):
