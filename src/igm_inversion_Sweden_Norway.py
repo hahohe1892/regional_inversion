@@ -171,7 +171,7 @@ for RID in [RID]:
     glacier.config.tend = dt
     glacier.config.tsave = 1
     glacier.config.cfl = 0.3
-    glacier.config.init_slidingco = 0
+    glacier.config.init_slidingco = 6
     glacier.config.init_arrhenius = 55
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf', 'dhdt'])
@@ -232,11 +232,11 @@ for RID in [RID]:
                 glacier.update_thk()
                 glacier.print_info()
 
-            # save output every p_save iterations
-            if p % p_save == 0:
-                if p != pmax:
-                    glacier.update_ncdf_ex()
-                    glacier.update_ncdf_ts()
+                # save output every p_save iterations
+                if p % p_save == 0:
+                    if p != pmax:
+                        glacier.update_ncdf_ex()
+                        glacier.update_ncdf_ts()
 
             # calculate dhdt
             dhdt = (glacier.usurf - S_old)/dt
