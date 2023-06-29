@@ -36,6 +36,8 @@ for i,RID in enumerate(RIDs_with_obs):
     slope_x = input_igm.usurf.differentiate('x')
     slope_y = input_igm.usurf.differentiate('y')
     slope = np.sqrt(slope_x**2 + slope_y**2) * input_igm.mask
+    sin_slope = np.sin(np.arctan(slope))
+    #taub = sin_slope * thk * 9.8 * 910 * .9
     slope.rio.to_raster(working_dir / 'slope.tif')
     if RID == 'RGI60-08.00213':
         if output_file_pp is not None:
@@ -122,9 +124,9 @@ MAE_Millan = np.mean(abs(reference_thickness-all_NO.THICK_Millan))
 slope_mod = np.polyfit(reference_thickness, all_NO.THICK_MOD, 1)[0]
 slope_cons = np.polyfit(reference_thickness, all_NO.THICK_CONS, 1)[0]
 slope_Millan = np.polyfit(reference_thickness[~np.isnan(all_NO.THICK_Millan)], all_NO.THICK_Millan[~np.isnan(all_NO.THICK_Millan)], 1)[0]
-R_mod = all_NO.corr().THICKNESS['THICK_MOD']
-R_cons = all_NO.corr().THICKNESS['THICK_CONS']
-R_Millan = all_NO.corr().THICKNESS['THICK_Millan']
+R_mod = all_NO.corr(numeric_only = True).THICKNESS['THICK_MOD']
+R_cons = all_NO.corr(numeric_only = True).THICKNESS['THICK_CONS']
+R_Millan = all_NO.corr(numeric_only = True).THICKNESS['THICK_Millan']
 var_obs = np.var(reference_thickness)
 var_mod = np.var(all_NO.THICK_MOD)
 var_cons = np.var(all_NO.THICK_CONS)
@@ -196,3 +198,21 @@ for RID_obs in T.RGI_ID.to_list():
     max_thk = np.round((area_thk * mask).max(), 1)
     print('{}\nObserved mean thickness: {}, Modelled mean thickness: {}'.format(T[T.RGI_ID == RID_obs].GLACIER_NAME.values[0], T[T.RGI_ID == RID_obs].MEAN_THICKNESS.values[0], mean_thk.values))
     print('Observed max thickness: {}, Modelled max thickness: {}'.format(T[T.RGI_ID == RID_obs].MAXIMUM_THICKNESS.values[0], max_thk.values))
+
+
+by_glacier = all_NO.set_index([all_NO['glacier'], all_NO.groupby('glacier').cumcount()]).drop('glacier', 1).unstack(0)
+by_glacier.columns = [f'{y}_{x}' for x,y in by_glacier.columns]
+
+r_per_glacier = pd.DataFrame({*all_NO.glacier.unique()})
+rs_MOD = []
+rs_CONS = []
+rs_Millan = []
+for glacier in all_NO.glacier.unique():
+    cors = by_glacier.corr(numeric_only = True)[glacier + '_THICKNESS']
+    rs_MOD.append(cors.loc[glacier + '_THICK_MOD'])
+    rs_CONS.append(cors.loc[glacier + '_THICK_CONS'])
+    rs_Millan.append(cors.loc[glacier + '_THICK_Millan'])
+r_per_glacier['r_MOD'] = rs_MOD
+r_per_glacier['r_CONS'] = rs_CONS
+r_per_glacier['r_Millan'] = rs_Millan
+    
