@@ -7,10 +7,11 @@ home_dir = Path('/home/thomas')
 Fill_Value = 9999.0
 RID = 'RGI60-08.00434' # Tunsbergdalsbreen
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
+
 for i,RID in enumerate(RIDs_with_obs):
     working_dir = home_dir / 'regional_inversion/output/' / RID
-    output_file = 'ex_v6.6.nc'
-    post_processed_file = 'ex_v6.6_pp_{}.tif'
+    output_file = 'ex_v6.7.nc'
+    post_processed_file = 'ex_v6.7_pp_{}.tif'
     if not os.path.exists(working_dir / output_file):
         continue
     input_file = working_dir / 'igm_input.nc'
@@ -25,7 +26,7 @@ for i,RID in enumerate(RIDs_with_obs):
     ncfile.close()
     #last_iteration.close()
 
-    last_iteration.thk.data = gauss_filter(last_iteration.thk.data, 1, 3)
+    last_iteration.thk.data = gauss_filter(last_iteration.thk.data, 2, 4) * normalize(last_iteration.thk.data) + last_iteration.thk.data * (-normalize(last_iteration.thk.data) + 1)
     for p in range(5):
         last_iteration.thk.data[np.logical_and(input_igm.mask.data[0] == 1, last_iteration.thk.data < 5)] = last_iteration.thk.attrs['_FillValue']
         if p % 2 == 0:
