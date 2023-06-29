@@ -33,10 +33,9 @@ for i,RID in enumerate(RIDs_with_obs):
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
     if not os.path.exists(working_dir / output_file):
         continue
-    slope = deepcopy(input_igm.climatic_mass_balance)
-    slope_x, slope_y = Igm.compute_gradient_tf(input_igm.usurf.data, input_igm.usurf.data[0], 100, 100)
-    slope_calc = np.sqrt(slope_x**2 + slope_y**2)
-    slope.data[0] = slope_calc*input_igm.mask.data[0]#normalize(slope_calc*input_igm.mask.data[0])
+    slope_x = input_igm.usurf.differentiate('x')
+    slope_y = input_igm.usurf.differentiate('y')
+    slope = np.sqrt(slope_x**2 + slope_y**2) * input_igm.mask
     slope.rio.to_raster(working_dir / 'slope.tif')
     if RID == 'RGI60-08.00213':
         if output_file_pp is not None:
