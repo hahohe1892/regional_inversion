@@ -614,6 +614,26 @@ def write_path_to_mosaic(RID, area_RIDs):
         working_dir = os.path.join(home_dir + '/regional_inversion/output/', area_RID)
         with open(os.path.join(working_dir, 'mosaic_reference.txt'), 'w') as fp:
             fp.write('This glacier is part of a larger glaciated area,\nand the results therefore can be found under the following RGI ID:\n{}'.format(RID))
+
+
+def calc_h_perfect_plasticity(tau_b, usurf, mask, f = 1):
+    if tau_b is None:
+        dH = (usurf.where(mask == 1).max() - usurf.where(mask == 1).min())/1000
+        if dH < 1.6:
+            tau_b = 1.5e5
+        else:
+            tau_b = (0.005 + 1.598 * dH - 0.435 * dH**2) * 1e5
+        tau_b = np.maximum(tau_b, 0.005 * 1e6)
+    slope_x = usurf.differentiate('x')
+    slope_y = usurf.differentiate('y')
+    slope = np.sqrt(slope_x**2 + slope_y**2) * mask
+    sin_slope = np.sin(np.arctan(slope))
+    sin_slope = np.maximum(sin_slope, 0.025)
+    sin_slope.data[0] = gauss_filter(sin_slope.data[0], 1, 3)
+    rho = 910
+    g = 9.8
+    h = tau_b / (rho * g * sin_slope * f)
+    return h
             
 '''
 cutoffs = [0,50,100,200,300, None]

@@ -15,8 +15,8 @@ import math
 from igm.igm import Igm
 
 home_dir = Path('/home/thomas')
-output_file = 'ex_v6.6.nc'
-output_file_pp = 'ex_v6.6_pp_{}.tif'
+output_file = 'ex_v6.7.nc'
+output_file_pp = 'ex_v6.7_pp_{}.tif'
 Fill_Value = 9999.0
 iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
@@ -203,11 +203,11 @@ for RID_obs in T.RGI_ID.to_list():
 by_glacier = all_NO.set_index([all_NO['glacier'], all_NO.groupby('glacier').cumcount()]).drop('glacier', 1).unstack(0)
 by_glacier.columns = [f'{y}_{x}' for x,y in by_glacier.columns]
 
-r_per_glacier = pd.DataFrame({*all_NO.glacier.unique()})
+r_per_glacier = pd.DataFrame(index = all_NO.glacier.unique())
 rs_MOD = []
 rs_CONS = []
 rs_Millan = []
-for glacier in all_NO.glacier.unique():
+for glacier in r_per_glacier.index:
     cors = by_glacier.corr(numeric_only = True)[glacier + '_THICKNESS']
     rs_MOD.append(cors.loc[glacier + '_THICK_MOD'])
     rs_CONS.append(cors.loc[glacier + '_THICK_CONS'])
@@ -216,3 +216,4 @@ r_per_glacier['r_MOD'] = rs_MOD
 r_per_glacier['r_CONS'] = rs_CONS
 r_per_glacier['r_Millan'] = rs_Millan
     
+print(r_per_glacier)

@@ -58,8 +58,8 @@ fr = utils.get_rgi_region_file('08', version='62')
 gdf = gpd.read_file(fr)
 Fill_Value = 9999.0
 already_checked = []
-#for RID in gdf.RGIId.to_list()[4:]:
-for RID in [RID]:
+for RID in gdf.RGIId.to_list()[4:]:
+#for RID in [RID]:
 #for RID in RIDs_with_obs:
     # check if this glacier has been modelled either in this session, or ever
     if check_global_already_modelled is True:
@@ -77,7 +77,7 @@ for RID in [RID]:
     if not os.path.exists(input_file) or override_inputs is True:
 
         # obtain all glaciers connected in one glacier complex
-        input_igm, internal_boundaries, area_RIDs = obtain_area_mosaic(RID, discard_list = already_checked)
+        input_igm, internal_boundaries, area_RIDs = obtain_area_mosaic(RID, discard_list = already_checked, buffer_width = 2000)
         write_path_to_mosaic(RID, area_RIDs)
 
         input_igm.usurf_oggm.data = input_igm.usurf_oggm.where(input_igm.usurf_oggm != -9999, 9999).data
@@ -148,16 +148,16 @@ for RID in [RID]:
 
     # set inversion parameters (note: no buffer used currently)
     dt = .2
-    pmax = 6000
+    pmax = 7000
     beta_0 = 0.5
     theta = 0.8
-    p_save = 200 # number of iterations when output is saved
+    p_save = 500 # number of iterations when output is saved
     p_mb = 1500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
 
     # if Jostedalsbreen is simulated, change inversion parameters
     if 'RGI60-08.00434' in [area_RIDs, RID]:
-        pmax = 10000
+        pmax = 12000
         p_mb = 3000
         s_refresh = 600
         beta_0 = .5
@@ -171,8 +171,8 @@ for RID in [RID]:
     glacier.config.tend = dt
     glacier.config.tsave = 1
     glacier.config.cfl = 0.3
-    glacier.config.init_slidingco = 6
-    glacier.config.init_arrhenius = 40
+    glacier.config.init_slidingco = 0
+    glacier.config.init_arrhenius = 55
     glacier.config.working_dir = working_dir
     glacier.config.vars_to_save.extend(['velbase_mag', 'uvelsurf', 'vvelsurf', 'dhdt'])
     glacier.config.verbosity = 0
@@ -242,7 +242,7 @@ for RID in [RID]:
             dhdt = (glacier.usurf - S_old)/dt
             glacier.dhdt.assign(dhdt)
             # dhdt is equal to misfit when using apparent mass balance
-            misfit = tf.math.minimum(tf.math.maximum(dhdt, -2), 2)
+            misfit = tf.math.minimum(tf.math.maximum(dhdt, -5), 5)
 
             # check how much ice has left mask
             left_sum[p].assign(tf.math.reduce_sum(tf.where(mask == 0, dhdt, 0)))
