@@ -16,14 +16,14 @@ import sys
 from pathlib import Path
 from tensorflow.python.client import device_lib
 
-#RID = 'RGI60-08.00213' # Storglaciären
+RID = 'RGI60-08.00213' # Storglaciären
 #RID = 'RGI60-08.00188' # Rabots
 #RID = 'RGI60-08.00005' # Salajekna
 #RID = 'RGI60-08.00146' # Paartejekna
 #RID = 'RGI60-08.00121' # Mikkajekna
 #RID = 'RGI60-07.01475' # Droenbreen
 #RID = 'RGI60-07.00389' # Bergmesterbreen
-RID = 'RGI60-08.00434' # Tunsbergdalsbreen
+#RID = 'RGI60-08.00434' # Tunsbergdalsbreen
 #RID = 'RGI60-08.01657' # Svartisen
 #RID = 'RGI60-08.01779' # Hardangerjökulen
 #RID = 'RGI60-08.02666' # Aalfotbreen
@@ -45,7 +45,7 @@ else:
     home_dir = Path('/mimer/NOBACKUP/groups/snic2022-22-55/')
     model_dir = Path('{}/regional_inversion/src/igm/'.format(os.environ['HOME']))
 
-override_inputs = True
+override_inputs = False
 check_global_already_modelled = True # if this is false, global checking is activated
 override_global = True
 obtain_A_c_from_vel = False
@@ -59,8 +59,8 @@ fr = utils.get_rgi_region_file('08', version='62')
 gdf = gpd.read_file(fr)
 Fill_Value = 9999.0
 already_checked = []
-for RID in gdf.RGIId.to_list()[4:]:
-#for RID in [RID]:
+#for RID in gdf.RGIId.to_list()[4:]:
+for RID in [RID]:
 #for RID in RIDs_with_obs:
     # check if this glacier has been modelled either in this session, or ever
     if check_global_already_modelled is True:
@@ -125,10 +125,18 @@ for RID in gdf.RGIId.to_list()[4:]:
     a_smb = gauss_filter(a_smb,1, 3)
     a_smb[mask == 0] = 0
 
+    # calculate initial ice thickness based on perfect plasticity approach
+    thk_perfect_plasticity  = calc_h_perfect_plasticity(None, input_igm.usurf, input_igm.mask) * input_igm.mask
+    thk_perfect_plasticity = thk_perfect_plasticity.rio.write_nodata(Fill_Value)
+    in_thk_buffer = internal_buffer(2,thk_perfect_plasticity.data > 0)
+    thk_perfect_plasticity.data[in_thk_buffer == 1] = thk_perfect_plasticity.attrs['_FillValue']
+    thk_perfect_plasticity = thk_perfect_plasticity.rio.interpolate_na(method = 'linear')
+    thk_perfect_plasticity.data = gauss_filter(thk_perfect_plasticity.data, 1, 3)
+    
     # below is possibility to experiment with some settings
     S_ref[mask == 0] += 0
     B_init[mask == 0] = S_ref[mask == 0]
-    B_init[mask == 1] = gauss_filter(B_init, 2, 4)[mask == 1] #S_ref[mask == 1]
+    B_init[mask == 1] = S_ref[mask == 1] - thk_perfect_plasticity.data[mask == 1] #gauss_filter(B_init, 2, 4)[mask == 1] #S_ref[mask == 1]
     
     # smooth velocity field
     vel_smooth = gauss_filter(vel_ref, 2, 4)
@@ -149,11 +157,11 @@ for RID in gdf.RGIId.to_list()[4:]:
             c = np.where(A_tilde <= 78, 0, A_tilde - 78)
 
     # set inversion parameters (note: no buffer used currently)
-    dt = .2
+    dt = 2
     pmax = 7000
     beta_0 = 0.5
     theta = 0.8
-    p_save = 500 # number of iterations when output is saved
+    p_save = 20 # number of iterations when output is saved
     p_mb = 1500  # iterations before end when mass balance is recalculated
     s_refresh = 250 # number of iterations when surface is reset
 
@@ -171,7 +179,7 @@ for RID in gdf.RGIId.to_list()[4:]:
     glacier = Igm()
     glacier.config.tstart = 0
     glacier.config.tend = dt
-    glacier.config.tsave = 1
+    glacier.config.tsave = 50
     glacier.config.cfl = 0.3
     glacier.config.init_slidingco = 0
     glacier.config.init_arrhenius = 55
@@ -228,18 +236,23 @@ for RID in gdf.RGIId.to_list()[4:]:
             S_old.assign(glacier.usurf)
 
             # run forward simulation with IGM
+            p = 0
             while glacier.t < glacier.config.tend:
+                p += 1
                 glacier.update_iceflow()
                 glacier.update_t_dt()
                 glacier.update_thk()
                 glacier.print_info()
-
                 # save output every p_save iterations
-                if p % p_save == 0:
-                    if p != pmax:
-                        glacier.update_ncdf_ex()
-                        glacier.update_ncdf_ts()
-
+                #if p % p_save == 0:
+                #    if p != pmax:
+                glacier.update_ncdf_ex()
+                glacier.update_ncdf_ts()
+                if p% 100 == 0:
+                    glacier.usurf.assign(S_ref)
+                    glacier.thk.assign(glacier.thk * glacier.icemask)
+                    glacier.topg.assign(glacier.usurf - glacier.thk)
+                    
             # calculate dhdt
             dhdt = (glacier.usurf - S_old)/dt
             glacier.dhdt.assign(dhdt)
@@ -265,13 +278,13 @@ for RID in gdf.RGIId.to_list()[4:]:
             new_bed = tf.math.minimum(glacier.usurf, glacier.topg - beta * misfit_masked)
 
             # do bed averaging
-            if p>10 and p%40 == 0 and update_surface < 0:
+            if p>10 and p%40000 == 0 and update_surface < 0:
                 if p < 50:
                     new_bed = tf.math.minimum(tf.reduce_mean(B_rec_all[p-4:p], axis = 0), S_new)
                 else:
                     new_bed = tf.math.minimum(tf.reduce_mean(B_rec_all[-4:], axis = 0), S_new)
 
-            if p>10 and p%50 == 0 and update_surface < 0:
+            if p>10 and p%500 == 0 and update_surface < 0:
                 new_bed = tf.math.minimum(tf.reduce_mean(B_rec_all[-50:], axis = 0), S_new)
 
             # assign new ice thickness and bed

@@ -1262,7 +1262,13 @@ class Igm:
             )
 
             # update ice surface accordingly
-            self.usurf.assign(self.topg + self.thk)
+            #self.usurf.assign(self.topg + self.thk)
+            beta = 1
+            theta = .5
+            self.dhdt.assign((self.thk - (self.usurf - self.topg)) * self.icemask)
+            self.usurf.assign(self.usurf + beta * theta * self.dhdt)
+            self.topg.assign(self.topg - self.dhdt * beta)
+            self.thk.assign(self.usurf - self.topg)
 
             # update gradients of the surface (slopes)
             self.slopsurfx, self.slopsurfy = self.compute_gradient_tf(
