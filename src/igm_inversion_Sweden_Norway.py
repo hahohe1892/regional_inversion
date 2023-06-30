@@ -47,7 +47,7 @@ else:
 
 override_inputs = True
 check_global_already_modelled = True # if this is false, global checking is activated
-override_global = True
+override_global = False
 obtain_A_c_from_vel = False
 if check_global_already_modelled is True: # in that case, we check if this glacier should be modelled in check_file
     check_file = home_dir / 'regional_inversion/already_checked.txt'
@@ -125,10 +125,17 @@ for RID in gdf.RGIId.to_list()[4:]:
     a_smb = gauss_filter(a_smb,1, 3)
     a_smb[mask == 0] = 0
 
+    # calculate initial ice thickness based on perfect plasticity approach
+    thk_perfect_plasticity  = calc_h_perfect_plasticity(None, input_igm.usurf, input_igm.mask) * input_igm.mask
+    thk_perfect_plasticity = thk_perfect_plasticity.rio.write_nodata(Fill_Value)
+    in_thk_buffer = internal_buffer(2,thk_perfect_plasticity.data > 0)
+    thk_perfect_plasticity.data[in_thk_buffer == 1] = thk_perfect_plasticity.attrs['_FillValue']
+    thk_perfect_plasticity = thk_perfect_plasticity.rio.interpolate_na(method = 'linear')
+    thk_perfect_plasticity.data = gauss_filter(thk_perfect_plasticity.data, 1, 3)
     # below is possibility to experiment with some settings
     S_ref[mask == 0] += 0
     B_init[mask == 0] = S_ref[mask == 0]
-    B_init[mask == 1] = gauss_filter(B_init, 2, 4)[mask == 1] #S_ref[mask == 1]
+    B_init[mask == 1] = S_ref[mask == 1] - thk_perfect_plasticity.data[mask == 1] #gauss_filter(B_init, 2, 4)[mask == 1] #S_ref[mask == 1]
     
     # smooth velocity field
     vel_smooth = gauss_filter(vel_ref, 2, 4)
