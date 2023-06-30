@@ -52,11 +52,14 @@ for i,RID in enumerate(all_glaciers):
 
     #normalize thickness field relative to a max thickness of 500 m (i.e. all thicknesses >=500 m get the max smoothing)
     norm = normalize(last_iteration.thk.data) * np.minimum((np.nanmax(last_iteration.thk.data)/500), 1)
+    #set norm values in interpolated areas to 1, meaning that they will received strong smoothing
     norm[abs(thk_orig - last_iteration.thk.data)>1] = 1 * input_igm.mask.data[0][abs(thk_orig - last_iteration.thk.data)>1]
     norm[buffer_norm1 == 1] = 1
     norm_close = close_internal_holes((norm == 1) * 1)
     norm[norm_close == 1] = 1
+    last_iteration.thk.data[input_igm.mask.data[0] == 0] = np.nan
     last_iteration.thk.data = gauss_filter(last_iteration.thk.data, 2, 4) * norm + last_iteration.thk.data * (-norm+ 1)
+    last_iteration.thk.data[input_igm.mask.data[0] == 0] = 0
     last_iteration.thk.data[buffer_outline == 1] = last_iteration.thk.attrs['_FillValue']
     last_iteration['thk'] = last_iteration.thk.rio.interpolate_na(method = 'linear')
     

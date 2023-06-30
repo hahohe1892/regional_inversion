@@ -15,23 +15,29 @@ import math
 from igm.igm import Igm
 
 home_dir = Path('/home/thomas')
-output_file = 'ex_v6.7.nc'
-output_file_pp = 'ex_v6.7_pp_{}.tif'
+output_file = 'ex_v7.0.nc'
+output_file_pp = 'ex_v7.0_pp_{}.tif'
 Fill_Value = 9999.0
 iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
 icecaps = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.00435']
 glaciers = [i for i in RIDs_with_obs if i not in icecaps]
+already_checked = []
 
-
-for i,RID in enumerate(RIDs_with_obs):
-    #RID = get_mosaic_reference(RID_obs)
+for i,RID_obs in enumerate(all_glaciers):
+    RID = get_mosaic_reference(RID_obs)
+    #RID = RID_obs
+    if RID in already_checked:
+        continue
+    else:
+        already_checked.append(RID)
     working_dir = home_dir / 'regional_inversion/output/' / RID
     input_file = working_dir / 'igm_input.nc'
     input_igm = rioxr.open_rasterio(input_file)
     for var in input_igm.data_vars:
         input_igm.data_vars[var].rio.write_nodata(Fill_Value, inplace=True)
     if not os.path.exists(working_dir / output_file):
+        print('{} does not exist'.format(RID_obs))
         continue
     slope_x = input_igm.usurf.differentiate('x')
     slope_y = input_igm.usurf.differentiate('y')
@@ -39,7 +45,7 @@ for i,RID in enumerate(RIDs_with_obs):
     sin_slope = np.sin(np.arctan(slope))
     #taub = sin_slope * thk * 9.8 * 910 * .9
     slope.rio.to_raster(working_dir / 'slope.tif')
-    if RID == 'RGI60-08.00213':
+    if RID_obs == 'RGI60-08.00213':
         if output_file_pp is not None:
             out_thk = rasterio.open(working_dir / output_file_pp.format('thk')).read()
         else:
@@ -60,7 +66,7 @@ for i,RID in enumerate(RIDs_with_obs):
                                       'THICK_Millan': thk_Millan.data.flatten(),
                                       'SLOPE': in_slope.data[0].flatten()})
         Storglaciären = Storglaciären.dropna(subset = ['THICKNESS'])
-        Storglaciären['glacier'] = RID
+        Storglaciären['glacier'] = RID_obs
         all_NO = pd.concat([all_NO, Storglaciären])
     else:
         if output_file_pp is not None:
@@ -200,7 +206,7 @@ for RID_obs in T.RGI_ID.to_list():
     print('Observed max thickness: {}, Modelled max thickness: {}'.format(T[T.RGI_ID == RID_obs].MAXIMUM_THICKNESS.values[0], max_thk.values))
 
 
-by_glacier = all_NO.set_index([all_NO['glacier'], all_NO.groupby('glacier').cumcount()]).drop('glacier', 1).unstack(0)
+by_glacier = all_NO.set_index([all_NO['glacier'], all_NO.groupby('glacier').cumcount()]).drop('glacier', axis = 1).unstack(0)
 by_glacier.columns = [f'{y}_{x}' for x,y in by_glacier.columns]
 
 r_per_glacier = pd.DataFrame(index = all_NO.glacier.unique())

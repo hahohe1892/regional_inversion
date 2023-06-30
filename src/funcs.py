@@ -523,3 +523,26 @@ def calc_point_density(field1, field2):
     xy = np.vstack([field1, field2])
     z = gaussian_kde(xy)(xy)
     return z
+
+
+def internal_buffer(bw, mask):
+    mask_iter = mask == 1
+    mask_bw = ~mask_iter
+    buffer = np.zeros_like(mask_iter)
+    for i in range(bw):
+        boundary_mask = mask_bw==0
+        k = np.ones((3,3),dtype=int)
+        boundary = nd.binary_dilation(boundary_mask==0, k) & boundary_mask
+        mask_bw = np.where(boundary, 1, mask_bw)
+    buffer = ((mask_bw + mask_iter)-1)
+    return buffer
+
+
+def close_internal_holes(mask_poorly_connected):
+    donout_kernel = np.array([[1,1,1],[1,0,1], [1,1,1]])
+    hits = [1]
+    while len(hits)>0:
+        convolved_mask = nd.convolve(mask_poorly_connected, donout_kernel)
+        hits = np.where(np.logical_and(convolved_mask>6, mask_poorly_connected != 1))[0]
+        mask_poorly_connected[convolved_mask > 5] = 1
+    return mask_poorly_connected
