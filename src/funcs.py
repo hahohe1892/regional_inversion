@@ -481,8 +481,15 @@ def movieqs(extra, step=1, file_name = 'animation.mp4', **kwargs):
     subprocess.call(cmd)
 
 
-def normalize(x):
-    return (x-np.nanmin(x))/(np.nanmax(x) - np.nanmin(x))
+def normalize(x, newRange=(0, 1)): #x is an array. Default range is between zero and one
+    xmin, xmax = np.nanmin(x), np.nanmax(x) #get max and min from input array
+    norm = (x - xmin)/(xmax - xmin) # scale between zero and one
+    
+    if newRange == (0, 1):
+        return(norm) # wanted range is the same as norm
+    elif newRange != (0, 1):
+        return norm * (newRange[1] - newRange[0]) + newRange[0] #scale to a different range.    
+
 
 def do_kdtree(new_bed, mask, buffer):
     remove_ind = (buffer.numpy() == 1).flatten() + (mask.numpy() == 0).flatten()
