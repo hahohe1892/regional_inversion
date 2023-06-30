@@ -48,6 +48,7 @@ else:
 override_inputs = True
 check_global_already_modelled = True # if this is false, global checking is activated
 override_global = True
+obtain_A_c_from_vel = False
 if check_global_already_modelled is True: # in that case, we check if this glacier should be modelled in check_file
     check_file = home_dir / 'regional_inversion/already_checked.txt'
     if override_global is True:
@@ -134,17 +135,18 @@ for RID in gdf.RGIId.to_list()[4:]:
 
     # set A and c based on velocity pattern
     A_tilde = np.zeros_like(mask) + 30
-    if (vel_smooth == 0).all(): # velocity not available for all glaciers
-        A = np.ones_like(A_tilde) * 60
-        c = np.zeros_like(A_tilde)
-    else:
-        q25 = np.quantile(vel_smooth[mask == 1], .05)
-        q75 = np.quantile(vel_smooth[mask == 1], .95)
-        A_tilde[np.logical_and(mask == 1, vel_smooth <= q25)] = 30
-        A_tilde[np.logical_and(mask == 1, vel_smooth >= q75)] = 84
-        A_tilde[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))] = normalize(vel_smooth[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))]) * 54 + 30
-        A = np.where(A_tilde <= 78, A_tilde, 78)
-        c = np.where(A_tilde <= 78, 0, A_tilde - 78)
+    if obtain_A_c_from_vel:
+        if (vel_smooth == 0).all(): # velocity not available for all glaciers
+            A = np.ones_like(A_tilde) * 60
+            c = np.zeros_like(A_tilde)
+        else:
+            q25 = np.quantile(vel_smooth[mask == 1], .05)
+            q75 = np.quantile(vel_smooth[mask == 1], .95)
+            A_tilde[np.logical_and(mask == 1, vel_smooth <= q25)] = 30
+            A_tilde[np.logical_and(mask == 1, vel_smooth >= q75)] = 84
+            A_tilde[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))] = normalize(vel_smooth[np.logical_and(mask == 1, np.logical_and(vel_smooth > q25, vel_smooth < q75))]) * 54 + 30
+            A = np.where(A_tilde <= 78, A_tilde, 78)
+            c = np.where(A_tilde <= 78, 0, A_tilde - 78)
 
     # set inversion parameters (note: no buffer used currently)
     dt = .2
