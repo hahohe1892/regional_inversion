@@ -4,6 +4,7 @@ import rioxarray as rioxr
 from funcs import *
 from oggm import utils
 import geopandas as gpd
+from write_output import get_mosaic_reference
 
 home_dir = Path('/home/thomas')
 Fill_Value = 9999.0
@@ -16,10 +17,17 @@ all_glaciers = gdf.RGIId.to_list()[4:]
 RID = 'RGI60-08.00139'
 RID = 'RGI60-08.00314'
 #RID = 'RGI60-08.00078'
-for i,RID in enumerate(all_glaciers):
+
+already_checked = []
+for i,RID_obs in enumerate(RIDs_with_obs):
+    RID = get_mosaic_reference(RID_obs)
+    if RID in already_checked:
+        continue
+    else:
+        already_checked.append(RID)
     working_dir = home_dir / 'regional_inversion/output/' / RID
-    output_file = 'ex_v7.0.nc'
-    post_processed_file = 'ex_v7.0_pp_{}.tif'
+    output_file = 'ex_v7.0_2nd_retrieve.nc'
+    post_processed_file = 'ex_v7.0_2nd_retrieve_pp_{}.tif'
     if not os.path.exists(working_dir / output_file):
         continue
     print('processing {}...'.format(RID))
