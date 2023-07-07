@@ -15,16 +15,19 @@ import math
 from igm.igm import Igm
 
 home_dir = Path('/home/thomas')
-output_file = 'ex_v7.0.nc'
-output_file_pp = 'ex_v7.0_pp_{}.tif'
+output_file = 'ex_v7.0_2nd_retrieve.nc'
+output_file_pp = 'ex_v7.0_2nd_retrieve_pp_{}.tif'
 Fill_Value = 9999.0
 iteration = -1
 RIDs_with_obs = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.02666', 'RGI60-08.01258', 'RGI60-08.02382', 'RGI60-08.00966', 'RGI60-08.00987', 'RGI60-08.00312', 'RGI60-08.02972', 'RGI60-08.01103', 'RGI60-08.00435', 'RGI60-08.00213']
 icecaps = ['RGI60-08.00434', 'RGI60-08.01657', 'RGI60-08.01779', 'RGI60-08.00435']
 glaciers = [i for i in RIDs_with_obs if i not in icecaps]
+fr = utils.get_rgi_region_file('08', version='62')
+gdf = gpd.read_file(fr)
+all_glaciers = gdf.RGIId.to_list()[4:]
 already_checked = []
 
-for i,RID_obs in enumerate(all_glaciers):
+for i,RID_obs in enumerate(RIDs_with_obs):
     RID = get_mosaic_reference(RID_obs)
     #RID = RID_obs
     if RID in already_checked:
@@ -119,7 +122,7 @@ for i,RID_obs in enumerate(all_glaciers):
         else:
             all_NO = pd.concat([all_NO, glathida_NO])
 
-
+#all_NO = deepcopy(all_NO_orig)#.where(all_NO_orig.THICK_CONS < 300).dropna(subset = ['THICKNESS'])
 reference_thickness = all_NO.THICKNESS
 rmse_mod = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_MOD)).mean())
 rmse_cons = math.sqrt(np.square(np.subtract(reference_thickness,all_NO.THICK_CONS)).mean())
@@ -149,42 +152,179 @@ stats_table = pd.DataFrame({'r':[np.nan, R_mod, R_cons, R_Millan],
                             'mean deviation': [np.nan, dev_mod, dev_cons, dev_Millan]},
                            index = ['Observations', 'This study', 'Consensus estimate', 'Millan'])
 
-print(stats_table)
+print(stats_table.round(2))
 
 
-pd_MOD = calc_point_density(reference_thickness, all_NO.THICK_MOD)
+pd_mod = calc_point_density(reference_thickness, all_NO.THICK_MOD)
 pd_CONS = calc_point_density(reference_thickness, all_NO.THICK_CONS)
+pd_Millan = calc_point_density(all_NO.dropna(subset = ['THICK_Millan']).THICKNESS, all_NO.dropna(subset = ['THICK_Millan']).THICK_Millan)
 cmap = plt.get_cmap('Set1')
 colors = cmap(np.linspace(0, 1, len(all_NO.glacier)))
-fs = 17
-fig, ax = plt.subplots(1,3, figsize = (18,6))
-ax[0].scatter(reference_thickness, all_NO.THICK_Millan, alpha = .1, label = 'Millan (2022)')
-ax[1].scatter(reference_thickness, all_NO.THICK_CONS, alpha = .1, label = 'Consensus', c = pd_CONS)
-ax[2].scatter(reference_thickness, all_NO.THICK_MOD, alpha = .1, label = 'This study', c = pd_MOD)
-for axes in ax:
-    axes.plot(range(700), range(700), '--', c='r')
-    axes.set(adjustable='box', aspect='equal')
-    axes.set_xlabel('Observed ice thickness (m)', fontsize = fs)
-    axes.set_ylabel('Modelled ice thickness (m)', fontsize = fs)
-    axes.set_xticks(range(0, 800, 100))
-    axes.set_yticks(range(0, 800, 100))
+fs = 10
+s = 1
+alpha = 1
+fig, ax = plt.subplots(2,2, figsize = (6,7), subplot_kw=dict(box_aspect=1))
+ax[0,0].scatter(reference_thickness, all_NO.THICK_MOD, alpha = alpha, label = 'This study', c = pd_mod, s = s)
+ax[0,1].hist(all_NO.Difference, range(-300,300, 8))
+#ax[0,1].hist(all_NO.THICKNESS - all_NO.THICK_CONS, range(-300,300, 8), alpha = .3)
+ax[0,1].axvline(0, linestyle = '--', c = 'r')
+ax[1,0].scatter(reference_thickness, all_NO.THICK_CONS, alpha = alpha, label = 'Farinotti et al. (2019)', c = pd_CONS, s = s)
+ax[1,1].scatter(all_NO.dropna(subset = ['THICK_Millan']).THICKNESS, all_NO.dropna(subset = ['THICK_Millan']).THICK_Millan, alpha = alpha, label = 'Millan et al. (2022)', c = pd_Millan, s = s)
+for i,axes in enumerate(ax.flatten()):
     axes.tick_params(axis='both', which='major', labelsize=fs*.8)
+    if i in [1,3]:
+        axes.yaxis.tick_right()
+        axes.yaxis.set_label_position("right")
+    if i == 1:
+        continue
+    axes.plot(range(700), range(700), '--', c='r')
+    #axes.plot(range(700), range(20, 720), '--', c='r')
+    #axes.plot(range(20, 700), range(0, 680), '--', c='r')
+    axes.set(adjustable='box', aspect='equal')
+    if i in [0,2,3]:
+        axes.set_xlabel('h$_{obs}$ (m)', fontsize = fs)
+        axes.set_ylabel('h$_{mod}$ (m)', fontsize = fs)
+    axes.set_xticks(range(0, 800, 200))
+    axes.set_yticks(range(0, 800, 200))
     axes.set_axisbelow(True)
-    axes.grid()
-    axes.legend(fontsize = fs/2)
+    axes.grid(linestyle = '--', linewidth = .5)
+ax[0,1].set_xlim([-300,300])
+ax[0,1].set_xticks(range(-250, 300, 125))
+ax[0,1].set_yticks(range(0, 800, 200))
+ax[0,1].set_xlabel('h$_{obs}$ - h$_{mod}$ (m)', fontsize = fs)
+ax[0,1].set_ylabel('# obs', fontsize = fs)
+ax[1,0].set_title('Farinotti et al. (2019)')
+ax[1,1].set_title('Millan et al. (2022)')
+plt.tight_layout()
+fig.suptitle('This study')
+#plt.savefig('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/plots/validation.png', dpi = 400)
 plt.show()
 
-thk_mosaic_mod = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/v5.0/thk/all_thk_v5.0.tif')
+thk_mosaic_mod = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/v7.0_2nd_retrieve/all_thk_v7.0_2nd_retrieve_pp_UTM34N.tif')
 thk_mosaic_mod.values[thk_mosaic_mod.values == thk_mosaic_mod._FillValue] = 0
 #thk_mosaic_cons = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/all_thk_consensus.tif')
 #thk_mosaic_cons.values[thk_mosaic_cons.values == thk_mosaic_cons._FillValue] = 0
 #thk_mosaic_Millan = rioxr.open_rasterio('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/all_thk_Millan.tif')
 #thk_mosaic_Millan.values[thk_mosaic_Millan.values == thk_mosaic_Millan._FillValue] = 0
 
-V_mod = thk_mosaic_mod.sum() * 100 * 100 / 1e9
-#V_cons = thk_mosaic_cons.sum() * 100 * 100 / 1e9
-#V_Millan = thk_mosaic_Millan.sum() * 100 * 100 / 1e9
+V_mod = thk_mosaic_mod.sum() * 100 * 100 / 1e9 #according to ArcMap Zonal statistics with countries as input: 286.03547542645003
+V_cons = thk_mosaic_cons.sum() * 100 * 100 / 1e9 #according to ArcMap: 299.14117018926385
+V_Millan = thk_mosaic_Millan.sum() * 100 * 100 / 1e9 #according to ArcMap: 316.29483053213386
 
+all_sum = []
+Sweden_sums = []
+Norway_sums = []
+all_area = []
+Sweden_area = []
+Norway_area = []
+cons_sum = []
+cons_sums_SWE = []
+cons_sums_NO = []
+glaciers_Sweden = get_RIDs_Sweden().RGIId.to_list()
+for RID in all_glaciers:
+    thk_cons = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/{}_thickness.tif'.format(RID)).read()
+    cons_sum.append(thk_cons.sum())
+    if RID in glaciers_Sweden:
+        cons_sums_SWE.append(cons_sum[-1])
+    else:
+        cons_sums_NO.append(cons_sum[-1])
+                
+    if os.path.exists('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/v7.0_2nd_retrieve/{}ex_v7.0_2nd_retrieve_pp_thk.tif'.format(RID)):
+        thk_mod = rasterio.open('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/outputs/v7.0_2nd_retrieve/{}ex_v7.0_2nd_retrieve_pp_thk.tif'.format(RID)).read()
+        thk_sum = thk_mod[thk_mod>1].sum()
+        all_sum.append(thk_sum)
+        area = len(np.nonzero(thk_mod>1)[0]) * 100 * 100
+        all_area.append(area)
+        if RID in glaciers_Sweden:
+            Sweden_sums.append(thk_sum)
+            Sweden_area.append(area)
+        else:
+            Norway_sums.append(thk_sum)
+            Norway_area.append(area)
+    else:
+        continue
+
+final_sum = np.sum(np.array(all_sum))
+final_vol = final_sum * 100 * 100 /1e9
+Sweden_sum = np.sum(np.array(Sweden_sums))
+Sweden_vol = Sweden_sum * 100 * 100 /1e9
+Norway_sum = np.sum(np.array(Norway_sums))
+Norway_vol = Norway_sum * 100 * 100 /1e9
+cons_vol = np.sum(np.array(cons_sum)) * 25 * 25 /1e9
+cons_vol_NO = np.sum(np.array(cons_sums_NO)) * 25 * 25 /1e9
+cons_vol_SWE = np.sum(np.array(cons_sums_SWE)) * 25 * 25 /1e9
+
+SLE = final_vol * (0.9167/1.027) * (1.027 / 361.8)
+
+mean_thk = final_sum*100*100 / np.array(all_area).sum()
+mean_thk_NO = Norway_sum * 100 * 100 / np.array(Norway_area).sum()
+mean_thk_SE = Sweden_sum * 100 * 100 / np.array(Sweden_area).sum()
+area_q99 = all_area >= np.quantile(all_area, .99)
+vol_q99 = np.sum(np.array(all_sum)[area_q99]) * 100 * 100 / 1e9
+area_q01 = all_area <= np.quantile(all_area, .99)
+vol_q01 = np.sum(np.array(all_sum)[area_q01]) * 100 * 100 / 1e9
+area_1km = (np.array(all_area) / 1e6) > 1
+vol_1km = np.sum(np.array(all_sum)[area_1km]) * 100 * 100 / 1e9
+
+
+cmap = plt.get_cmap('viridis')
+colors = [cmap(0.2), cmap(0.6), cmap(0.35), cmap(0.75)]
+fs = 14
+alpha = .6
+for i in range(3):
+    fig1, ax1 = plt.subplots()
+    ax1.pie([final_vol], colors = ['lightblue'], textprops = {'fontsize': fs})
+    if i == 1:
+        pie = ax1.pie([Sweden_vol, Norway_vol], autopct='%1.1f%%', startangle=90, pctdistance=0.85, colors = colors[:2], textprops = {'fontsize': fs}, wedgeprops = {'alpha': alpha})
+        plt.legend(pie[0], ['Sweden', 'Norway'], loc = 8, ncol=2)
+    if i == 2:
+        pie = ax1.pie([vol_q01, vol_q99], autopct='%1.1f%%', startangle=90, pctdistance=0.85, colors = colors[2:], textprops = {'fontsize': fs}, wedgeprops = {'alpha': alpha})
+        plt.legend(pie[0], ['smaller 99%', 'largest 1%'], loc = 8, ncol=2)
+    if i == 0:
+        centre_circle = plt.Circle((0,0),0.70,fc='white')
+    else:
+        centre_circle = plt.Circle((0,0),0.70,fc='w')
+    ax1.add_artist(centre_circle)
+    if i > 0:
+        ax1.annotate('{} km$^3$'.format(round(final_vol,1)), (-.3,-0.07), fontsize = fs)
+    if i == 0:
+        ax1.annotate('    {} km$^3$\n={} mm SLE'.format(round(final_vol,1), round(SLE,2)), (-.4,-0.07), fontsize = fs)
+    plt.tight_layout()
+    #plt.savefig('/mnt/c/Users/thofr531/Documents/Publications/IUGG 2023/ice_volume_{}.tif'.format(i), dpi = 400)
+plt.show()
+
+
+fig, ax = plt.subplots(figsize = (3,6))
+ax.bar([0,.2], [mean_thk_NO, mean_thk_SE], width = .1, color = colors[:2], tick_label = ['Norway', 'Sweden'], alpha = alpha)
+ax.annotate('{} m'.format(int(round(mean_thk_NO, 0))), (0- 0.04,mean_thk_NO + 1), fontsize = fs)
+ax.annotate('{} m'.format(int(round(mean_thk_SE, 0))), (.2- 0.035, mean_thk_SE + 1), fontsize = fs)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.spines['left'].set_visible(False)
+ax.get_yaxis().set_ticks([])
+plt.xticks(fontsize = fs)
+#plt.savefig('/mnt/c/Users/thofr531/Documents/Publications/IUGG 2023/mean_thk.tif', dpi = 400)
+plt.show()
+
+stats_consensus = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/consensus_thk/RGI60-08/stats_consensus.txt', sep = ';', decimal = ',')
+stats_Millan = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/Scandinavia/thk_Millan/stats_Millan.txt', sep = ';', decimal = ',')
+vol_NO_Andreassen = 271
+#vol_NO_cons, vol_SWE_cons = (stats_consensus[stats_consensus.SOVEREIGNT == 'Norway'].SUM.iloc[0] * 25 * 25/1e9, stats_consensus[stats_consensus.SOVEREIGNT == 'Sweden'].SUM.iloc[0] * 25 * 25/1e9)
+vol_NO_Millan, vol_SWE_Millan = (stats_Millan[stats_Millan.SOVEREIGNT == 'Norway'].SUM.iloc[0] * 50 * 50/1e9, stats_Millan[stats_Millan.SOVEREIGNT == 'Sweden'].SUM.iloc[0] * 50 * 50/1e9)
+vols = [Norway_vol, Sweden_vol, cons_vol_NO, cons_vol_SWE, vol_NO_Millan, vol_SWE_Millan, vol_NO_Andreassen]
+colors_Vol = colors[:2] * 3
+colors_Vol.append(colors[0])
+lefts = [0, Norway_vol, 0, cons_vol_NO, 0, vol_NO_Millan, 0]
+ys = [0,0,1,1,2,2,3]
+fig, ax = plt.subplots(figsize = (6,4))
+ax.barh(ys, vols, height = .5, left = lefts, color = colors_Vol, tick_label = ['', 'This study', '', 'Farinotti et al. (2019)', '', 'Millan et al. (2022)', 'Andreassen et al. (2015)'], alpha = alpha)
+ax.set_xlabel('Ice volume Scandinavia (km$^3$)')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.set_xlim([200,300])
+plt.tight_layout()
+plt.savefig('/mnt/c/Users/thofr531/Documents/Publications/IUGG 2023/ice_volume_comparison.tif', dpi = 400)
+plt.show()
 
 T_pd = pd.read_csv('/mnt/c/Users/thofr531/Documents/Global/glathida-3.1.0/data/T.csv')#, usecols = ['LAT', 'LON', 'MEAN_THICKNESS', 'POLITICAL_UNIT', 'MEAN_THICKNESS_UNCERTAINTY', 'MAXIMUM_THICKNESS', 'MAX_THICKNESS_UNCERTAINTY', 'GLACIER_NAME'])
 T = gpd.GeoDataFrame(T_pd, geometry=gpd.points_from_xy(T_pd.LON, T_pd.LAT),crs = 'epsg: 4326')
@@ -223,3 +363,16 @@ r_per_glacier['r_CONS'] = rs_CONS
 r_per_glacier['r_Millan'] = rs_Millan
     
 print(r_per_glacier)
+
+
+names = []
+for i,RID_obs in enumerate(RIDs_with_obs):
+    names.append(gdf[gdf.RGIId == RID_obs].Name)
+    input_dir = home_dir / 'regional_inversion/output/' / RID_obs
+    input_file = input_dir / 'input.nc'
+    glacier_input = rioxr.open_rasterio(input_file)
+    RID = get_mosaic_reference(RID_obs)
+    working_dir = home_dir / 'regional_inversion/output/' / RID
+    with rasterio.open(working_dir / post_processed_file.format('thk')) as thk_tif:
+        glacier_input.rio.reproject_match(thk_tif)
+        thk_out = thk_tif.read()
